@@ -104,6 +104,7 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     return new Connection.URI(queryWebRTCSignallingURI || `${ws_protocol}://${globalAddress.value}:6021`)
   })
   const webRTCSignallingURI = ref(_webRTCSignallingURI)
+  const iceServers = useStorage<string[]>('cockpit-rtc-ice-servers', [])
   const lastHeartbeat = ref<Date>()
   const firmwareType = ref<MavAutopilot>()
   const vehicleType = ref<MavType>()
@@ -479,10 +480,19 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     }
   }, 10)
 
-  const rtcConfiguration = {
-    bundlePolicy: 'max-bundle',
-    iceServers: [],
-  } as RTCConfiguration
+  const rtcConfiguration = computed(() => {
+    return {
+      bundlePolicy: 'max-bundle',
+      iceServers: [
+        ...iceServers.value.map((url) => ({ urls: url })),
+        {
+          urls: `turn:${globalAddress.value}:3478`,
+          username: 'user',
+          credential: 'pwd',
+        },
+      ],
+    } as RTCConfiguration
+  })
 
   return {
     arm,
@@ -520,6 +530,7 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     isVehicleOnline,
     icon,
     configurationPages,
+    iceServers,
     rtcConfiguration,
     genericVariables,
     availableGenericVariables,

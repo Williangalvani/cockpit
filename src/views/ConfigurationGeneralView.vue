@@ -93,7 +93,7 @@
           <v-checkbox
             v-model="webRTCSignallingURI.isCustom"
             v-tooltip.bottom="'Enable custom'"
-            class="mx-1 mb-5 pa-0"
+            class="mx-1 pa-0"
             rounded="lg"
             hide-details
           />
@@ -109,18 +109,50 @@
             :rules="[isValidSocketConnectionURI]"
           />
 
-          <v-btn v-tooltip.bottom="'Set'" icon="mdi-check" class="mx-1 mb-5 pa-0" rounded="lg" flat type="submit" />
+          <v-btn v-tooltip.bottom="'Set'" icon="mdi-check" class="mx-1 pa-0" rounded="lg" flat type="submit" />
           <v-btn
             v-tooltip.bottom="'Reset to default'"
             :disabled="webRTCSignallingURI.val.toString() === webRTCSignallingURI.defaultValue.toString()"
             icon="mdi-refresh"
-            class="mx-1 mb-5 pa-0"
+            class="mx-1 pa-0"
             rounded="lg"
             flat
             @click="resetWebRTCSignallingURI"
           />
         </v-form>
-        <span>Current address: {{ mainVehicleStore.webRTCSignallingURI.val.toString() }} </span><br />
+        <span class="ml-2">Current address: {{ mainVehicleStore.webRTCSignallingURI.val.toString() }} </span>
+        <div class="my-4 ml-2">
+          <span class="text-lg">ICE servers:</span>
+          <div class="mx-2">
+            <div v-if="mainVehicleStore.iceServers.isEmpty()">
+              <span>No ICE servers configured.</span>
+            </div>
+            <div v-else>
+              <div v-for="server in mainVehicleStore.iceServers" :key="server" class="my-1">
+                <v-icon :icon="'mdi-circle-small'" class="mr-1" />
+                <span class="font-medium">{{ server }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex">
+            <v-text-field
+              v-model="newIceServerAddress"
+              label="New ICE server address"
+              variant="underlined"
+              type="input"
+              hint="Address for the new ICE server to be added. E.g: 'stun:stun.l.google.com:19302'."
+              class="uri-input"
+            />
+            <v-btn
+              v-tooltip.bottom="'Add'"
+              icon="mdi-plus"
+              class="mx-1 mb-5 pa-0"
+              rounded="lg"
+              flat
+              @click="addIceServer"
+            />
+          </div>
+        </div>
       </v-card>
     </template>
   </BaseConfigurationView>
@@ -238,6 +270,16 @@ const setGlobalAddress = async (): Promise<void> => {
 const setWebRTCSignallingURI = async (): Promise<void> => {
   await webRTCSignallingForm.value.validate()
   mainVehicleStore.webRTCSignallingURI.val = webRTCSignallingURI.value.val
+}
+
+const newIceServerAddress = ref('')
+
+const addIceServer = (): void => {
+  if (!newIceServerAddress.value) return
+  if (!newIceServerAddress.value.startsWith('stun:')) return
+
+  mainVehicleStore.iceServers = [...mainVehicleStore.iceServers, newIceServerAddress.value]
+  newIceServerAddress.value = ''
 }
 </script>
 
