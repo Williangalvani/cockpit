@@ -569,6 +569,7 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     isVehicleOnline,
     icon,
     configurationPages,
+    iceServers,
     rtcConfiguration,
     customWebRTCConfiguration,
     genericVariables,
