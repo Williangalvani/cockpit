@@ -104,7 +104,7 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     return new Connection.URI(queryWebRTCSignallingURI || `${ws_protocol}://${globalAddress.value}:6021`)
   })
   const webRTCSignallingURI = ref(_webRTCSignallingURI)
-  const iceServers = useStorage<string[]>('cockpit-rtc-ice-servers', [])
+  const iceServers = useStorage<string[]>('cockpit-rtc-ice-servers', ['stun:stun.l.google.com:19302'])
   const lastHeartbeat = ref<Date>()
   const firmwareType = ref<MavAutopilot>()
   const vehicleType = ref<MavType>()
