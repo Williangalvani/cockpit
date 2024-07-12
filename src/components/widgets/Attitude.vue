@@ -312,20 +312,20 @@ const renderCanvas = (): void => {
   ctx.fillRect(0, 0, canvasSize.value.width, canvasSize.value.height)
 }
 
-// Update the height of each pitch line when the vehicle pitch is updated
-watch(cameraOffset, () => {
+function renderAttitudeLines(): void {
   pitchAngles.forEach((angle: number) => {
     const y = -round(angleY(angle + cameraOffset.value - degrees(store.attitude.pitch)), 2)
     gsap.to(renderVars.pitchLinesHeights, 0.1, { [angle]: y })
   })
+}
+
+// Update the height of each pitch line when the vehicle pitch or camera angle is updated
+watch(cameraOffset, () => {
+  renderAttitudeLines()
 })
 
-// Update the height of each pitch line when the vehicle pitch is updated
-watch(cameraTilt, () => {
-  pitchAngles.forEach((angle: number) => {
-    const y = -round(angleY(angle +cameraOffset.value - degrees(store.attitude.pitch)), 2)
-    gsap.to(renderVars.pitchLinesHeights, 0.1, { [angle]: y })
-  })
+watch(pitchAngleDeg, () => {
+  renderAttitudeLines()
 })
 
 // Update the HUD roll angle when the vehicle roll is updated
