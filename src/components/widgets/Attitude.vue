@@ -38,6 +38,22 @@
           :max="2500"
           thumb-label
         />
+        <span>Camera Vertical FOV</span>
+        <v-slider
+          v-model="widget.options.cameraFOV"
+          label="Camera vertical FOV"
+          :min="20"
+          :max="180"
+          thumb-label
+        />
+        <span>Camera Pitch angle offset</span>
+        <v-slider
+          v-model="widget.options.cameraAngleOffset"
+          label="Pitch angle offset"
+          :min="-1"
+          :max="1"
+          thumb-label
+        />
         <span>Center circle radius</span>
         <v-slider
           v-model="widget.options.desiredAimRadius"
@@ -99,6 +115,7 @@ type RenderVariables = {
 
 const rollAngleDeg = ref(0)
 const pitchAngleDeg = ref(0)
+const cameraTilt = ref(0)
 
 // Pitch angles for which horizontal indication lines are rendered.
 const pitchAngles = [-90, -70, -45, -30, -10, 0, 10, 30, 45, 70, 90]
@@ -121,6 +138,8 @@ onBeforeMount(() => {
       showRollPitchValues: true,
       desiredAimRadius: 150,
       pitchHeightFactor: 300,
+      cameraFOV: 64,
+      cameraAngleOffset: 0,
       hudColor: colorSwatches.value[0][0],
     }
   }
@@ -162,6 +181,24 @@ watch(store.attitude, (attitude) => {
     pitchAngleDeg.value = degrees(store.attitude.pitch)
   }
 })
+
+const updateCameraTilt = (message: any): void => {
+  const oldCamPitch = cameraTilt.value
+  const newCamPitch = message.CamTilt
+  const pitchDiff = Math.abs(newCamPitch - (oldCamPitch || 0))
+  if (pitchDiff > 0.01) {
+    cameraTilt.value = newCamPitch
+  }
+}
+
+watch(store.genericVariables, (message) => updateCameraTilt(message))
+
+const cameraOffset = computed(() => {
+    const ret = (cameraTilt.value + widget.value.options.cameraAngleOffset - 0.5)*3*widget.value.options.cameraFOV
+    console.log(ret)
+    return ret
+})
+
 
 // Returns the projected height of a pitch line for a given angle
 const angleY = (angle: number): number => {
@@ -276,9 +313,17 @@ const renderCanvas = (): void => {
 }
 
 // Update the height of each pitch line when the vehicle pitch is updated
-watch(pitchAngleDeg, () => {
+watch(cameraOffset, () => {
   pitchAngles.forEach((angle: number) => {
-    const y = -round(angleY(angle - degrees(store.attitude.pitch)), 2)
+    const y = -round(angleY(angle + cameraOffset.value - degrees(store.attitude.pitch)), 2)
+    gsap.to(renderVars.pitchLinesHeights, 0.1, { [angle]: y })
+  })
+})
+
+// Update the height of each pitch line when the vehicle pitch is updated
+watch(cameraTilt, () => {
+  pitchAngles.forEach((angle: number) => {
+    const y = -round(angleY(angle +cameraOffset.value - degrees(store.attitude.pitch)), 2)
     gsap.to(renderVars.pitchLinesHeights, 0.1, { [angle]: y })
   })
 })
