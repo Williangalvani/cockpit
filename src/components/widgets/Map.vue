@@ -145,14 +145,15 @@ onBeforeMount(() => {
 
 // Configure the available map tile providers
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
+  maxZoom: 21,
   attribution: '© OpenStreetMap',
 })
 
-const esri = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  { maxZoom: 19, attribution: '© Esri World Imagery' }
-)
+const esri = L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
+					maxZoom: 22,
+					subdomains:['mt0','mt1','mt2','mt3'],
+					maxNativeZoom: 20
+				})
 
 const baseMaps = {
   'OpenStreetMap': osm,
