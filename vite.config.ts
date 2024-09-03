@@ -1,6 +1,8 @@
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron'
+import mkcert from 'vite-plugin-mkcert'
 import { VitePWA } from 'vite-plugin-pwa'
 import vuetify from 'vite-plugin-vuetify'
 
@@ -14,6 +16,7 @@ export default defineConfig({
       },
     }).filter((configuration) => configuration.apply === 'build'),
     vue(),
+    mkcert(),
     vuetify({
       autoImport: true,
     }),
