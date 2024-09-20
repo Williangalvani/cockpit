@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print window.exposed_interface</title>
+</head>
+<body>
+    <h1>window.exposed_interface Content:</h1>
+    <div id="output"></div>
+
+    <script>
+        function printExposedInterface() {
+            console.log('I am an ifraame')
+            console.log(window.vehicle_store);
+            console.log(window.vehicle_store[ '[]']);
+            console.log(window.vehicle_store?.object?.mode);
+            // try {
+            // window.custom_function();
+                
+            // } catch (e) {
+            //     console.log(e)
+            // }
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerHTML = `<pre>${JSON.stringify(window.exposed_interface, null, 2)}</pre>`;
+        }
+        // Initial print
+        printExposedInterface();
+
+        // Set interval to print every 5 seconds
+        setInterval(printExposedInterface, 1000);
+    </script>
+</body>
+</html>

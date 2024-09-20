@@ -3,6 +3,7 @@
     <teleport to=".widgets-view">
       <iframe
         v-show="iframe_loaded"
+        ref="iframe"
         :src="widget.options.source"
         :style="iframeStyle"
         frameborder="0"
@@ -62,6 +63,10 @@ import { isValidURL } from '@/libs/utils'
 import { useAppInterfaceStore } from '@/stores/appInterface'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
 import type { Widget } from '@/types/widgets'
+import { useMainVehicleStore } from '@/stores/mainVehicle'
+
+const vehicleStore = useMainVehicleStore()
+
 const interfaceStore = useAppInterfaceStore()
 
 const widgetStore = useWidgetManagerStore()
@@ -133,12 +138,23 @@ const iframeOpacity = computed<number>(() => {
   return (100 - transparency.value) / 100
 })
 
+const iframe = ref()
+
 /**
  * Called when iframe finishes loading
  */
 function loadFinished(): void {
   console.log('Finished loading')
   iframe_loaded.value = true
+  setTimeout(() => {
+    console.log(`iframe loaded: ${iframe_loaded.value}`)
+    console.log('store:' , vehicleStore)
+    console.log('iframe:', iframe.value)
+    console.log('iframewibndow:', iframe.value.contentWindow)
+    iframe.value.contentWindow.vehicle_store = vehicleStore
+    iframe.value.contentWindow.potato = "potato"
+    console.log('iframe:', iframe.value.contentWindow.vehicle_store)
+  }, 1000)
 }
 
 watch(
