@@ -6,7 +6,7 @@
         :src="widget.options.source"
         :style="iframeStyle"
         frameborder="0"
-        @load="loadFinished"
+        @load="initializecockpitAPIv1"
       />
     </teleport>
     <v-dialog v-model="widgetStore.widgetManagerVars(widget.hash).configMenuOpen" min-width="400" max-width="35%">
@@ -80,6 +80,85 @@ const inputURL = ref(widget.value.options.source)
 const openSnackbar = ref(false)
 const snackbarMessage = ref('')
 
+// API object to inject into iframe
+const cockpitAPIv1 = {
+  // Send message to parent
+  sendToParent: (message: any) => {
+    console.log('Message from iframe:', message)
+    // Handle incoming messages from iframe
+    handleIframeMessage(message)
+  },
+  
+  // Get widget information
+  getWidgetInfo: () => ({
+    id: widget.value.hash,
+    position: widget.value.position,
+    size: widget.value.size,
+    visible: widgetStore.isWidgetVisible(widget.value)
+  }),
+  
+  // Update widget position
+  updatePosition: (x: number, y: number) => {
+    widget.value.position.x = x
+    widget.value.position.y = y
+  },
+  
+  // Update widget size
+  updateSize: (width: number, height: number) => {
+    widget.value.size.width = width
+    widget.value.size.height = height
+  }
+}
+
+// Handle messages from iframe
+const handleIframeMessage = (message: any) => {
+  if (!message || typeof message !== 'object') return
+  
+  // Example message handlers
+  switch (message.type) {
+    case 'resize':
+      if (message.width && message.height) {
+        cockpitAPIv1.updateSize(message.width, message.height)
+      }
+      break
+    case 'move':
+      if (message.x !== undefined && message.y !== undefined) {
+        cockpitAPIv1.updatePosition(message.x, message.y)
+      }
+      break
+    // Add more message handlers as needed
+    default:
+      console.log('Unhandled iframe message type:', message.type)
+  }
+}
+
+// Initialize API when iframe loads
+const initializecockpitAPIv1 = () => {
+  const iframeElement = document.querySelector('iframe')
+  if (!iframeElement || !iframeElement.contentWindow) return
+  
+  try {
+    // Only inject if same origin or we have permission
+    if (isValidURL(widget.value.options.source)) {
+      // Inject API object into iframe's window
+      (iframeElement.contentWindow as any).parentAPI = cockpitAPIv1
+      
+      // Setup message listener for cross-origin communication
+      window.addEventListener('message', (event) => {
+        // Verify origin for security
+        if (event.origin !== new URL(widget.value.options.source).origin) return
+        handleIframeMessage(event.data)
+      })
+      
+      iframe_loaded.value = true
+      console.log('Iframe API initialized')
+    }
+  } catch (error) {
+    console.error('Failed to initialize iframe API:', error)
+  }
+}
+
+// URL validation
 const validateURL = (url: string): true | string => {
   return isValidURL(url) ? true : 'URL is not valid.'
 }
@@ -92,8 +171,9 @@ const updateURL = (): void => {
     return
   }
   widget.value.options.source = inputURL.value
-  snackbarMessage.value = `IFrame URL sucessfully updated to '${inputURL.value}'.`
+  snackbarMessage.value = `IFrame URL successfully updated to '${inputURL.value}'.`
   openSnackbar.value = true
+  iframe_loaded.value = false // Reset loaded state for new URL
 }
 
 onBeforeMount(() => {
