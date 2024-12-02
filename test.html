@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CockpitAPIv1 Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 20px;
+      background: #f0f0f0;
+    }
+    .control-panel {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      margin: 5px;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      background: #e0e0e0;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="control-panel">
+    <h2>CockpitAPIv1 Test Panel</h2>
+    
+    <div class="grid">
+      <div>
+        <h3>Position</h3>
+        <div>
+          <label>X: <input type="number" id="posX" value="0.1" step="0.1" min="0" max="1"></label>
+        </div>
+        <div>
+          <label>Y: <input type="number" id="posY" value="0.1" step="0.1" min="0" max="1"></label>
+        </div>
+        <button onclick="updatePosition()">Update Position</button>
+      </div>
+      
+      <div>
+        <h3>Size</h3>
+        <div>
+          <label>Width: <input type="number" id="width" value="0.3" step="0.1" min="0.1" max="1"></label>
+        </div>
+        <div>
+          <label>Height: <input type="number" id="height" value="0.3" step="0.1" min="0.1" max="1"></label>
+        </div>
+        <button onclick="updateSize()">Update Size</button>
+      </div>
+    </div>
+
+    <div>
+      <button onclick="getInfo()">Get Widget Info</button>
+      <button onclick="getAllCockpitActionVariablesInfo()">Get All data</button>
+    </div>
+
+    <div class="status" id="status">Status: Checking API...</div>
+  </div>
+
+  <script>
+    window.onload = () => {
+      const status = document.getElementById('status')
+      status.textContent = window.CockpitAPIv1 ? 'Status: API Connected ✅' : 'Status: No API ❌'
+      if (window.CockpitAPIv1) getInfo()
+      setInterval(() => {
+        status.textContent = window.CockpitAPIv1 ? 'Status: API Connected ✅' : 'Status: No API ❌'
+      }, 1000)
+    }
+
+    function updateStatus(message) {
+      document.getElementById('status').textContent = 'Status: ' + message
+    }
+
+    function updatePosition() {
+      if (!window.CockpitAPIv1) return updateStatus('No API Connection')
+      
+      const x = parseFloat(document.getElementById('posX').value)
+      const y = parseFloat(document.getElementById('posY').value)
+      
+      window.CockpitAPIv1.setPosition(x, y)
+      updateStatus(`Position updated to x:${x}, y:${y}`)
+    }
+
+    function updateSize() {
+      if (!window.CockpitAPIv1) return updateStatus('No API Connection')
+      
+      const width = parseFloat(document.getElementById('width').value)
+      const height = parseFloat(document.getElementById('height').value)
+      
+      window.CockpitAPIv1.setSize(width, height)
+      updateStatus(`Size updated to width:${width}, height:${height}`)
+    }
+
+    function getInfo() {
+      if (!window.CockpitAPIv1) return updateStatus('No API Connection')
+      
+      const info = window.CockpitAPIv1.getInfo()
+      updateStatus('Widget Info: ' + JSON.stringify(info, null, 2))
+    }
+
+    function getAllCockpitActionVariablesInfo() {
+      if (!window.CockpitAPIv1) return updateStatus('No API Connection')
+      
+      window.CockpitAPIv1.getAllCockpitActionVariablesInfo().then((info) => {
+        updateStatus('All Cockpit Action Variables Info: ' + JSON.stringify(info, null, 2))
+      })
+    }
+  </script>
+</body>
+</html>
