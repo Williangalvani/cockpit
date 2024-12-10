@@ -3,6 +3,7 @@
     <teleport to=".widgets-view">
       <iframe
         v-show="iframe_loaded"
+        ref="iframe"
         :src="widget.options.source"
         :style="iframeStyle"
         frameborder="0"
@@ -60,12 +61,14 @@ import { defaultBlueOsAddress } from '@/assets/defaults'
 import Snackbar from '@/components/Snackbar.vue'
 import { isValidURL } from '@/libs/utils'
 import { useAppInterfaceStore } from '@/stores/appInterface'
+import { useMainVehicleStore } from '@/stores/mainVehicle'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
 import type { Widget } from '@/types/widgets'
+
 const interfaceStore = useAppInterfaceStore()
 
 const widgetStore = useWidgetManagerStore()
-
+const iframe = ref()
 const props = defineProps<{
   /**
    * Widget reference
@@ -97,10 +100,28 @@ const updateURL = (): void => {
 }
 
 onBeforeMount(() => {
+  console.log('1')
+  window.addEventListener(
+    'message',
+    (event) => {
+      console.log(event)
+    },
+    false
+  )
+  setInterval(() => {
+    const text = `SENDING ${useMainVehicleStore().attitude.yaw}`
+    console.log(text)
+    iframe.value.contentWindow.postMessage(
+      {
+        source: 'parent',
+        text: text,
+      },
+      '*'
+    )
+  }, 1000)
   if (Object.keys(widget.value.options).length !== 0) {
     return
   }
-
   widget.value.options = {
     source: defaultBlueOsAddress,
   }

@@ -484,8 +484,8 @@
       class="flex items-center justify-between w-full h-full gap-3 overflow-x-auto text-white -mb-1 pr-2 cursor-pointer"
     >
       <div
-        v-for="widgetType in availableWidgetTypes"
-        :key="widgetType"
+        v-for="widgetType in extendedWidgetTypes"
+        :key="widgetType.name"
         class="flex flex-col items-center justify-between rounded-md bg-[#273842] hover:brightness-125 h-[90%] aspect-square cursor-pointer elevation-4"
         draggable="true"
         @dragstart="onRegularWidgetDragStart"
@@ -496,7 +496,7 @@
             <div />
             <img
               v-bind="tooltipProps"
-              :src="widgetImages[widgetType]"
+              :src="widgetImages[widgetType.component]"
               alt="widget-icon"
               class="p-4 max-h-[75%] max-w-[95%]"
             />
@@ -504,7 +504,7 @@
               class="flex items-center justify-center w-full p-1 transition-all bg-[#3B78A8] rounded-b-md text-white"
             >
               <span class="whitespace-normal text-center">{{
-                widgetType.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (str) => str.toUpperCase()) ||
+                widgetType.name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (str) => str.toUpperCase()) ||
                 'Very Generic Indicator'
               }}</span>
             </div>
@@ -612,11 +612,20 @@ import URLVideoPlayerImg from '@/assets/widgets/URLVideoPlayer.png'
 import VideoPlayerImg from '@/assets/widgets/VideoPlayer.png'
 import VirtualHorizonImg from '@/assets/widgets/VirtualHorizon.png'
 import { useInteractionDialog } from '@/composables/interactionDialog'
+import { getWidgetsFromBlueOS } from '@/libs/blueos'
 import { MavType } from '@/libs/connection/m2r/messages/mavlink2rest-enum'
 import { isHorizontalScroll } from '@/libs/utils'
 import { useAppInterfaceStore } from '@/stores/appInterface'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
-import { type Profile, type View, type Widget, MiniWidgetType, WidgetType } from '@/types/widgets'
+import {
+  type Profile,
+  type View,
+  type Widget,
+  BlueOsWidget,
+  ExtendedWidget,
+  MiniWidgetType,
+  WidgetType,
+} from '@/types/widgets'
 
 import ExpansiblePanel from './ExpansiblePanel.vue'
 import GlassModal from './GlassModal.vue'
@@ -640,6 +649,8 @@ const toggleDial = (): void => {
 
 const forceUpdate = ref(0)
 
+const blueosWidgets = ref<BlueOsWidget[]>([])
+
 watch(
   () => store.currentView.widgets,
   () => {
@@ -659,7 +670,29 @@ const emit = defineEmits<{
   (e: 'update:editMode', editMode: boolean): void
 }>()
 
-const availableWidgetTypes = computed(() => Object.values(WidgetType))
+const availableWidgetTypes = computed(() =>
+  Object.values(WidgetType).map((widgetType) => {
+    return {
+      component: widgetType,
+      name: widgetType,
+      options: {},
+    }
+  })
+)
+
+const extendedWidgetTypes = computed(() => {
+  return [
+    ...availableWidgetTypes.value,
+    ...blueosWidgets.value.map((widget) => ({
+      component: WidgetType.IFrame,
+      name: widget.name,
+      options: {
+        source: widget.url,
+      },
+    })),
+  ]
+})
+
 const availableMiniWidgetTypes = computed(() =>
   Object.values(MiniWidgetType).map((widgetType) => ({
     component: widgetType,
@@ -860,7 +893,15 @@ const miniWidgetsContainerOptions = ref<UseDraggableOptions>({
 })
 useDraggable(availableMiniWidgetsContainer, availableMiniWidgetTypes, miniWidgetsContainerOptions)
 
+/**
+ *
+ */
+async function getBlueosWidgets(): Promise<void> {
+  blueosWidgets.value = await getWidgetsFromBlueOS()
+}
+
 onMounted(() => {
+  getBlueosWidgets()
   const widgetContainers = [availableWidgetsContainer.value, availableMiniWidgetsContainer.value]
   widgetContainers.forEach((container) => {
     container.addEventListener(
@@ -908,7 +949,7 @@ const onRegularWidgetDragStart = (event: DragEvent): void => {
   }
 }
 
-const onRegularWidgetDragEnd = (widgetType: WidgetType): void => {
+const onRegularWidgetDragEnd = (widgetType: ExtendedWidget): void => {
   store.addWidget(widgetType, store.currentView)
 
   const widgetCards = document.querySelectorAll('[draggable="true"]')

@@ -32,6 +32,7 @@ import {
   type Profile,
   type View,
   type Widget,
+  ExtendedWidget,
   MiniWidgetManagerVars,
   validateProfile,
   validateView,
@@ -410,16 +411,16 @@ export const useWidgetManagerStore = defineStore('widget-manager', () => {
    * @param { WidgetType } widgetType - Type of the widget
    * @param { View } view - View
    */
-  function addWidget(widgetType: WidgetType, view: View): void {
+  function addWidget(widgetType: ExtendedWidget, view: View): void {
     const widgetHash = uuid4()
 
     const widget = {
       hash: widgetHash,
-      name: widgetType,
-      component: widgetType,
+      name: widgetType.name,
+      component: widgetType.component,
       position: { x: 0.4, y: 0.32 },
       size: { width: 0.2, height: 0.36 },
-      options: {},
+      options: widgetType.options,
     }
 
     view.widgets.unshift(widget)

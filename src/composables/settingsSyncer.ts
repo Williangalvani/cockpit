@@ -21,7 +21,7 @@ setTimeout(() => {
   resetJustMade.value = false
 }, 10000)
 
-const getVehicleAddress = async (): Promise<string> => {
+export const getVehicleAddress = async (): Promise<string> => {
   const vehicleStore = useMainVehicleStore()
 
   // Wait until we have a global address

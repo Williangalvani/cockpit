@@ -1,5 +1,8 @@
 import ky, { HTTPError } from 'ky'
 
+import { useMainVehicleStore } from '@/stores/mainVehicle'
+import { BlueOsWidget } from '@/types/widgets'
+
 export const NoPathInBlueOsErrorName = 'NoPathInBlueOS'
 
 const defaultTimeout = 10000
@@ -13,7 +16,7 @@ export const getBagOfHoldingFromVehicle = async (
     const options = { timeout: defaultTimeout, retry: 0 }
     return await ky.get(`http://${vehicleAddress}/bag/v1.0/get/${bagPath}`, options).json()
   } catch (error) {
-    const errorBody = await (error as HTTPError).response.json()
+    console.error(error)
     if (errorBody.detail === 'Invalid path') {
       const noPathError = new Error(`No data available in BlueOS storage for path '${bagPath}'.`)
       noPathError.name = NoPathInBlueOsErrorName
@@ -28,6 +31,44 @@ export const getKeyDataFromCockpitVehicleStorage = async (
   storageKey: string
 ): Promise<Record<string, any> | undefined> => {
   return await getBagOfHoldingFromVehicle(vehicleAddress, `cockpit/${storageKey}`)
+}
+
+export const getWidgetsFromBlueOS = async (): Promise<BlueOsWidget[]> => {
+  const vehicleStore = useMainVehicleStore()
+
+  // Wait until we have a global address
+  while (vehicleStore.globalAddress === undefined) {
+    console.debug('Waiting for vehicle global address on BlueOS sync routine.')
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  try {
+    const options = { timeout: defaultTimeout, retry: 0 }
+    const data = (await ky
+      .get(`http://${vehicleStore.globalAddress}/helper/v1.0/web_services`, options)
+      .json()) as Record<string, any>
+    console.log(data)
+    // Extract the 'metadata.cockpit_widget' keys from the leaf nodes
+    let widgets: BlueOsWidget[] = []
+    for (const key of Object.keys(data)) {
+      const value = data[key]
+      if (typeof value === 'object') {
+        if (value.metadata && value.metadata.cockpit_widget) {
+          const newWidgets: BlueOsWidget[] = value.metadata.cockpit_widget.map((widget: BlueOsWidget) => {
+            return {
+              ...widget,
+              url: `http://${vehicleStore.globalAddress}:${value.port}${widget.url}`,
+            }
+          })
+          widgets = [...widgets, ...newWidgets]
+        }
+      }
+    }
+    return widgets
+  } catch (error) {
+    const errorBody = await (error as HTTPError).response.json()
+    console.error(errorBody)
+  }
+  return []
 }
 
 export const setBagOfHoldingOnVehicle = async (

@@ -1,6 +1,38 @@
 import type { Point2D, SizeRect2D } from './general'
 
 /**
+ *
+ */
+export interface BlueOsWidget {
+  /**
+   *
+   */
+  name: string
+  /**
+   *
+   */
+  url: string
+}
+
+/**
+ *
+ */
+export interface ExtendedWidget {
+  /**
+   *
+   */
+  component: WidgetType
+  /**
+   *
+   */
+  name: string
+  /**
+   *
+   */
+  options: Record<string, unknown>
+}
+
+/**
  * Available components to be used in the Widget system
  * The enum value is equal to the component's filename, without the '.vue' extension
  */
