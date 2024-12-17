@@ -1,6 +1,7 @@
 import { differenceInMilliseconds } from 'date-fns'
 import { unit } from 'mathjs'
 
+import { setDataLakeVariableData } from '@/libs/actions/data-lake'
 import { sendMavlinkMessage } from '@/libs/communication/mavlink'
 import type { MAVLinkMessageDictionary, Package, Type } from '@/libs/connection/m2r/messages/mavlink2rest'
 import {
@@ -294,6 +295,12 @@ export abstract class ArduPilotVehicle<Modes> extends Vehicle.AbstractVehicle<Mo
       return
     }
 
+    const messageName = mavlink_message.message.type
+    Object.entries(mavlink_message.message).forEach(([key, value]) => {
+      const fullPath = `${messageName}/${key}`
+      setDataLakeVariableData(fullPath, value)
+    })
+
     // Update our internal messages
     this._messages.set(mavlink_message.message.type, { ...mavlink_message.message, epoch: new Date().getTime() })
 
@@ -523,19 +530,19 @@ export abstract class ArduPilotVehicle<Modes> extends Vehicle.AbstractVehicle<Mo
 
       case MAVLinkType.NAMED_VALUE_FLOAT: {
         const namedValueFloatMessage = mavlink_message.message as Message.NamedValueFloat
-        const messageName = namedValueFloatMessage.name.join('').replaceAll('\x00', '')
-        if (!this._availableGenericVariablesdMessagePaths.includes(messageName)) {
-          this._availableGenericVariablesdMessagePaths.push(messageName)
+        const msgName = namedValueFloatMessage.name.join('').replaceAll('\x00', '')
+        if (!this._availableGenericVariablesdMessagePaths.includes(msgName)) {
+          this._availableGenericVariablesdMessagePaths.push(msgName)
         }
-        this._genericVariables[messageName] = namedValueFloatMessage.value
+        this._genericVariables[msgName] = namedValueFloatMessage.value
         this.onGenericVariables.emit()
         break
       }
 
       case MAVLinkType.NAMED_VALUE_INT: {
         const namedValueIntMessage = mavlink_message.message as Message.NamedValueInt
-        const messageName = namedValueIntMessage.name.join('').replaceAll('\x00', '')
-        this._genericVariables[messageName] = namedValueIntMessage.value
+        const msgName = namedValueIntMessage.name.join('').replaceAll('\x00', '')
+        this._genericVariables[msgName] = namedValueIntMessage.value
         this.onGenericVariables.emit()
         break
       }
