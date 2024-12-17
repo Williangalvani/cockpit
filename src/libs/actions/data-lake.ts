@@ -35,7 +35,7 @@ export const getDataLakeVariableInfo = (id: string): DataLakeVariable | undefine
 
 export const createDataLakeVariable = (variable: DataLakeVariable, initialValue?: string | number | boolean): void => {
   if (dataLakeVariableInfo[variable.id]) {
-    throw new Error(`Cockpit action variable with id '${variable.id}' already exists. Update it instead.`)
+    console.warn(`Cockpit action variable with id '${variable.id}' already exists. Update it instead.`)
   }
   dataLakeVariableInfo[variable.id] = variable
   dataLakeVariableData[variable.id] = initialValue
@@ -52,8 +52,27 @@ export const getDataLakeVariableData = (id: string): string | number | boolean |
   return dataLakeVariableData[id]
 }
 
-export const setDataLakeVariableData = (id: string, data: string | number | boolean): void => {
-  dataLakeVariableData[id] = data
+export const setDataLakeVariableData = (id: string, data: object | string | number | boolean): void => {
+  const newData = data
+  if (data === null) {
+    return
+  }
+  if (dataLakeVariableData[id] === undefined) {
+    console.trace(`Cockpit action variable with id '${id}' does not exist. Creating it.`)
+    const type_of_variable = typeof data
+    if (type_of_variable === 'object') {
+      // TODO: support strings
+    }
+    if (type_of_variable !== 'string' && type_of_variable !== 'number') {
+      console.debug(`attempting to create a variable with type ${type_of_variable}. Skipping`)
+      return
+    }
+    createDataLakeVariable(new DataLakeVariable(id, id, typeof data))
+  }
+  if (newData === undefined || typeof newData === 'object') {
+    return
+  }
+  dataLakeVariableData[id] = newData
   notifyDataLakeVariableListeners(id)
 }
 
