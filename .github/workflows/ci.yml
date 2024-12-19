@@ -67,9 +67,15 @@ jobs:
         include:
         - os: macos-13
           suffix: mac
+          arch: arm64
+          extension: dmg
+          latestMetadataName: latest-mac-arm64.yml
+
+        - os: macos-13
+          suffix: mac
           arch: x64
           extension: dmg
-          latestMetadataName: latest-mac.yml
+          latestMetadataName: latest-mac-x64.yml
 
         - os: ubuntu-latest
           suffix: linux
@@ -143,7 +149,7 @@ jobs:
         with:
           name: Cockpit-${{ matrix.suffix }}-${{ matrix.arch }}-${{ env.VERSION }}.zip
           path: dist/Cockpit*.zip
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Upload latest metadata artifact
         uses: actions/upload-artifact@v4

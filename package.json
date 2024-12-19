@@ -131,6 +131,15 @@
     },
     "artifactName": "${productName}-${os}-${arch}-${version}.${ext}",
     "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.utilities",
       "icon": "public/pwa-512x512.png"
     },
