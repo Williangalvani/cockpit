@@ -46,7 +46,8 @@ const baseConfig = {
     vuetify({
       autoImport: true,
     }),
-    VitePWA({
+    // Only include PWA plugin when NOT building the library
+    !isLibrary && VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true,
@@ -99,8 +100,9 @@ const libraryConfig = {
         },
       },
     },
-    outDir: 'dist/lib', // Separate output directory for library builds
-    minify: false, // Disable minification for now
+    outDir: 'dist/lib',
+    // Add copyPublicDir: false to prevent copying public assets
+    copyPublicDir: false,
   },
 }
 
