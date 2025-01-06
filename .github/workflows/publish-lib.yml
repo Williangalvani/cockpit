@@ -1,14 +1,13 @@
 name: Publish Library to NPM
 
-# Trigger condition
+# Trigger on tag push
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'API-v*'
 
 jobs:
   publish:
-    # Only runs for release tags starting with 'API-v'
-    if: startsWith(github.ref_name, 'API-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +18,7 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      # Extract version from release tag
+      # Extract version from tag
       - name: Extract API version
         run: echo "API_VERSION=${GITHUB_REF_NAME#API-v}" >> $GITHUB_ENV
 
