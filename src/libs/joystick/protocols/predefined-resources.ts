@@ -12,6 +12,7 @@ import { customActionTypes } from '@/types/cockpit-actions'
 
 export let mavlinkCameraZoomActionId: string | undefined = undefined
 export let mavlinkCameraFocusActionId: string | undefined = undefined
+export let mavlinkCameraFocusAbsoluteActionId: string | undefined = undefined
 
 export const setupMavlinkCameraResources = (): void => {
   const commonVariableConfig = { type: 'number' as DataLakeVariableType, allowUserToChangeValue: true }
@@ -22,6 +23,8 @@ export const setupMavlinkCameraResources = (): void => {
   // Initialize camera focus variables
   createDataLakeVariable({ id: 'camera-focus-decrease', name: 'Camera Focus Decrease', ...commonVariableConfig }, 0)
   createDataLakeVariable({ id: 'camera-focus-increase', name: 'Camera Focus Increase', ...commonVariableConfig }, 0)
+
+  createDataLakeVariable({ id: 'camera-focus-absolute', name: 'Camera Focus Absolute', ...commonVariableConfig }, 50)
 
   // Initialize camera zoom transforming function
   try {
@@ -115,7 +118,32 @@ export const setupMavlinkCameraResources = (): void => {
     mavlinkCameraFocusActionId = registerMavlinkMessageActionConfig(cameraFocusAction)
   }
 
-  // Link the camera zoom and focus actions to the camera zoom and focus variables (if not already linked)
+  const cameraFocusAbsoluteAction = {
+    name: 'Camera Focus Absolute (MAVLink)',
+    messageType: MAVLinkType.COMMAND_LONG,
+    messageConfig: {
+      target_system: { value: '{{ardupilotSystemId}}', type: MessageFieldType.NUMBER },
+      target_component: { value: 1, type: MessageFieldType.NUMBER },
+      command: { value: MavCmd.MAV_CMD_SET_CAMERA_FOCUS, type: MessageFieldType.TYPE_STRUCT_ENUM },
+      confirmation: { value: 0, type: MessageFieldType.NUMBER },
+      param1: { value: 2, type: MessageFieldType.NUMBER }, // Unused
+      param2: { value: '{{camera-focus-absolute}}', type: MessageFieldType.NUMBER }, // Focus value, from -1 to +1
+      param3: { value: 0, type: MessageFieldType.NUMBER }, // Control all cameras (ID = 0)
+      param4: { value: 0, type: MessageFieldType.NUMBER }, // Unused
+      param5: { value: 0, type: MessageFieldType.NUMBER }, // Unused
+      param6: { value: 0, type: MessageFieldType.NUMBER }, // Unused
+      param7: { value: 0, type: MessageFieldType.NUMBER }, // Unused
+    },
+  }
+
+  const existingAbsoluteFocusAction = Object.entries(existingActions).find(([, a]) => a.name === cameraFocusAbsoluteAction.name)
+  if (existingAbsoluteFocusAction) {
+    mavlinkCameraFocusAbsoluteActionId = existingAbsoluteFocusAction[0]
+  } else {
+    mavlinkCameraFocusAbsoluteActionId = registerMavlinkMessageActionConfig(cameraFocusAbsoluteAction)
+  }
+
+    // Link the camera zoom and focus actions to the camera zoom and focus variables (if not already linked)
   // Enforce a minimum interval of 100ms between consecutive executions so we don't overload the autopilot
   const existingLinks = getAllActionLinks()
   if (!existingLinks[mavlinkCameraZoomActionId] || existingLinks[mavlinkCameraZoomActionId].minInterval < 100) {
@@ -124,8 +152,10 @@ export const setupMavlinkCameraResources = (): void => {
   if (!existingLinks[mavlinkCameraFocusActionId] || existingLinks[mavlinkCameraFocusActionId].minInterval < 100) {
     saveActionLink(mavlinkCameraFocusActionId, customActionTypes.mavlinkMessage, ['camera-focus'], 100)
   }
+  if (!existingLinks[mavlinkCameraFocusAbsoluteActionId] || existingLinks[mavlinkCameraFocusAbsoluteActionId].minInterval < 100) {
+    saveActionLink(mavlinkCameraFocusAbsoluteActionId, customActionTypes.mavlinkMessage, ['camera-focus-absolute'], 100)
+  }
 }
-
 export const setupPredefinedLakeAndActionResources = (): void => {
   setupMavlinkCameraResources()
 }
