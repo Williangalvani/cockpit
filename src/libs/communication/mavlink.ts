@@ -7,6 +7,27 @@ import { MavlinkManualControlState } from '../joystick/protocols/mavlink-manual-
 
 let lastTimeLoggedConnectionError = new Date(0)
 
+const packageHasNaN = (value: unknown): boolean => {
+  if (typeof value === 'number') return Number.isNaN(value)
+  if (Array.isArray(value)) return value.some(packageHasNaN)
+  if (value !== null && typeof value === 'object') return Object.values(value).some(packageHasNaN)
+  return false
+}
+
+const mavlink2RestPostUrl = (): string | undefined => {
+  const uri = ConnectionManager.mainConnection()?.uri()
+  if (!uri) return undefined
+  const protocol = uri.protocol === 'wss:' ? 'https:' : 'http:'
+  return `${protocol}//${uri.host}/mavlink2rest/v1/mavlink`
+}
+
+const serializeMavlinkJson5 = (pack: Package): string => {
+  const nanPlaceholder = '__COCKPIT_NAN__'
+  return JSON.stringify(pack, (_key, value) =>
+    typeof value === 'number' && Number.isNaN(value) ? nanPlaceholder : value
+  ).replaceAll(`"${nanPlaceholder}"`, 'NaN')
+}
+
 /**
  * Send a mavlink message
  * @param {MavMessage} message
@@ -22,6 +43,19 @@ export const sendMavlinkMessage = (message: MavMessage): void => {
   }
   const textEncoder = new TextEncoder()
   try {
+    // The websocket endpoint parses strict JSON and rejects a NaN token. REST accepts JSON5, which
+    // is required for MAVLink floats that must be NaN on the wire (e.g. unused COMMAND_INT.z).
+    if (packageHasNaN(pack)) {
+      const url = mavlink2RestPostUrl()
+      if (!url) throw new Error('No MAVLink connection to post a NaN-containing message.')
+      const payload = serializeMavlinkJson5(pack)
+      void fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload }).catch(
+        (error) => {
+          console.error('Error sending MAVLink message:', error)
+        }
+      )
+      return
+    }
     ConnectionManager.write(textEncoder.encode(JSON.stringify(pack)))
   } catch (error) {
     // Don't log the error if it's too frequent
