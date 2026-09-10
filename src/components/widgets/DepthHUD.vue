@@ -221,7 +221,7 @@ watch([rawAltitude, resolvedAltitudeVariableId], ([newAlt, resolvedId]) => {
   const newDepth = unit(-altMeters, 'm')
 
   const depthDiff = Math.abs(newDepth.value - (depth.value || 0))
-  if (depthDiff < 0.1) return
+  if (depthDiff < 0.01) return
 
   const depthConverted = newDepth.to(interfaceStore.displayUnitPreferences.distance)
   passedDepths.value.push(depthConverted.toJSON().value)
@@ -318,7 +318,7 @@ const renderCanvas = (): void => {
     ctx.textAlign = 'right'
     ctx.font = `bold ${refFontSize}px Arial`
     ctx.fillText(
-      `${depth.value.toFixed(1)} ${currentUnit.value}`,
+      `${depth.value.toFixed(Math.abs(depth.value) < 1 ? 2 : 1)} ${currentUnit.value}`,
       stdPad + 4.3 * refFontSize - refTriangleSize - stdPad,
       indicatorY + initialPaddingY
     )
