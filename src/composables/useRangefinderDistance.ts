@@ -1,11 +1,11 @@
-import { median } from 'mathjs'
-import { type Ref, computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { type Ref, onMounted, onUnmounted, ref } from 'vue'
 
-import { useDataLakeVariable } from '@/composables/useDataLakeVariable'
 import {
   getAllDataLakeVariablesInfo,
   getDataLakeVariableData,
   getDataLakeVariableLastUpdateTimestamp,
+  listenDataLakeVariable,
+  unlistenDataLakeVariable,
 } from '@/libs/actions/data-lake'
 import {
   isRangefinderDistanceVariableId,
@@ -15,26 +15,45 @@ import {
 
 const staleTimeoutMs = 3000
 const selectionIntervalMs = 1000
-const sampleCount = 5
 
 /**
  * Distance to the bottom measured by the vehicle's downward-facing rangefinder, discovered from the DISTANCE_SENSOR
  * messages in the data lake so that sensors published by the autopilot and by companion computer drivers both work.
- * @returns {{ distanceInMeters: Ref<number | undefined> }} Filtered distance, undefined while none measures the bottom
+ * @returns {{ distanceInMeters: Ref<number | undefined> }} Last reading, undefined while none measures the bottom
  */
 export function useRangefinderDistance(): {
   /** @type {Ref<number | undefined>} */
   distanceInMeters: Ref<number | undefined>
 } {
-  const selectedVariableId = ref<string | undefined>(undefined)
-  const samples = ref<number[]>([])
+  const distanceInMeters = ref<number | undefined>(undefined)
+  let subscribedVariableId: string | undefined
+  let distanceListenerId: string | undefined
   let selectionInterval: ReturnType<typeof setInterval> | undefined
-
-  const { value: rawDistance } = useDataLakeVariable(selectedVariableId)
 
   const isPublishing = (variableId: string): boolean => {
     const lastUpdate = getDataLakeVariableLastUpdateTimestamp(variableId)
     return lastUpdate !== undefined && performance.now() - lastUpdate < staleTimeoutMs
+  }
+
+  const updateDistance = (reading: string | number | boolean): void => {
+    if (typeof reading !== 'number' || reading <= 0) return
+    // DISTANCE_SENSOR reports centimeters
+    distanceInMeters.value = reading / 100
+  }
+
+  // Notifying on timestamp change brings in the distances repeating the previous one, which the data lake does not
+  // treat as a value change and which are all a sonar sends while the vehicle rests on the bottom
+  const subscribeToDistance = (variableId: string | undefined): void => {
+    if (variableId === subscribedVariableId) return
+    if (subscribedVariableId !== undefined && distanceListenerId !== undefined) {
+      unlistenDataLakeVariable(subscribedVariableId, distanceListenerId)
+    }
+    // A reading from another sensor, or from before a dropout, is not the current distance
+    distanceInMeters.value = undefined
+    subscribedVariableId = variableId
+    distanceListenerId = undefined
+    if (variableId === undefined) return
+    distanceListenerId = listenDataLakeVariable(variableId, updateDistance, { notifyOnTimestampChange: true })
   }
 
   // The data lake keeps the last reading of a rangefinder that was disconnected, so the update timestamps are what
@@ -52,19 +71,8 @@ export function useRangefinderDistance(): {
         }
       })
 
-    selectedVariableId.value = selectRangefinderVariableId(candidates)
+    subscribeToDistance(selectRangefinderVariableId(candidates))
   }
-
-  watch(rawDistance, (newDistance) => {
-    if (typeof newDistance !== 'number' || newDistance <= 0) return
-    // DISTANCE_SENSOR reports centimeters
-    samples.value = [...samples.value, newDistance / 100].slice(-sampleCount)
-  })
-
-  // Readings from another sensor, or from before a dropout, must not blend into the current distance
-  watch(selectedVariableId, () => {
-    samples.value = []
-  })
 
   onMounted(() => {
     selectRangefinder()
@@ -73,10 +81,8 @@ export function useRangefinderDistance(): {
 
   onUnmounted(() => {
     clearInterval(selectionInterval)
+    subscribeToDistance(undefined)
   })
-
-  // The median discards the isolated spikes and dropouts a sonar returns, which an average would instead drag to
-  const distanceInMeters = computed(() => (samples.value.length === 0 ? undefined : median(samples.value)))
 
   return { distanceInMeters }
 }
