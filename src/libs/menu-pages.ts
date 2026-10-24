@@ -69,7 +69,7 @@ export const menuPages: Record<SubMenuComponentName, MenuPage> = {
   [SubMenuComponentName.SettingsJoystick]: {
     subMenu: SubMenuName.settings,
     slug: 'joystick',
-    title: t`Joystick`,
+    title: t`Controllers`,
     icon: 'mdi-controller',
     iconNudgeY: 1,
   },

@@ -139,8 +139,8 @@ const steps = [
   },
   {
     id: 7,
-    title: t`Joystick Configuration`,
-    content: t`Connect a controller and move a joystick or press a button to see the current function mapping.`,
+    title: t`Controllers Configuration`,
+    content: t`Connect a controller and move a joystick or press a button to see the current function mapping. Keyboard keys can also be mapped, on the Keyboard tab.`,
     opposite: t`Fully supported joysticks have a visual configuration interface available, but there's also a mapping table provided for custom or uncommon controllers. Actions can be related to vehicle functions, can influence the display, or can run custom requests or code.`,
   },
   {
