@@ -153,6 +153,7 @@ import {
   registerActionCallback,
   unregisterActionCallback,
 } from '@/libs/joystick/protocols/cockpit-actions'
+import { startKeyboardControl } from '@/libs/keyboard'
 import { isElectron, sleep } from '@/libs/utils'
 import { useGeoFenceStore } from '@/stores/geoFence'
 import { useMissionStore } from '@/stores/mission'
@@ -196,7 +197,7 @@ import {
   useActiveMenuRoute,
   useMenuRouteSync,
 } from './composables/menuRouting'
-import { useSnackbar } from './composables/snackbar'
+import { openActionErrorSnackbar, useSnackbar } from './composables/snackbar'
 import { useMcpBridge } from './composables/useMcpBridge'
 import { useOffCenterAxisWarning } from './composables/useOffCenterAxisWarning'
 import { usePointsOfInterest } from './composables/usePointsOfInterest'
@@ -283,6 +284,9 @@ useExternalMapMeshes()
 // Created at boot so the vehicle's fence is re-read on every connection, before any map is mounted.
 useGeoFenceStore()
 
+// Started at boot so mapped keys work before the controllers configuration is ever opened.
+const stopKeyboardControl = startKeyboardControl(openActionErrorSnackbar)
+
 // Keep the main menu and the address showing the same destination.
 useMenuRouteSync()
 
@@ -352,6 +356,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleEscKey)
+  stopKeyboardControl()
 })
 
 /* eslint-disable jsdoc/require-jsdoc  */
