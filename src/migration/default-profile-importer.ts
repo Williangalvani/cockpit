@@ -8,7 +8,7 @@ import { getDefaultMapping } from '@/libs/joystick/default-mappings'
 import { OtherProtocol } from '@/libs/joystick/protocols/other'
 import { toPlain } from '@/libs/utils'
 import type { AxisCorrespondence, JoystickProtocolActionsMapping } from '@/types/joystick'
-import type { Profile, View } from '@/types/widgets'
+import { type Profile, type View, type Widget, WidgetType } from '@/types/widgets'
 
 // toRaw keeps the JSON walk untracked: buildViewsGroupAfterImport runs inside a computed
 // (useVehicleDefaultsViewsImport.ts), which would otherwise depend on every widget in the layout.
@@ -301,6 +301,28 @@ export const buildFreshViewsGroupFromDefault = (defaultProfile: Profile): Profil
   for (const view of fresh.views) {
     rehashViewAndWidgets(view)
   }
+  return fresh
+}
+
+/**
+ * Builds a fresh ViewsGroup from the vehicle-type default for a SITL whose physics runs in the Simulator widget.
+ * The simulator replaces the first view's video player, since a simulated vehicle has no camera stream, and only
+ * one is added because each instance loads its own copy of the simulator.
+ * @param {Profile} defaultProfile - The vehicle-type default profile
+ * @returns {Profile} A fresh ViewsGroup ready to assign to the widget store
+ */
+export const buildFreshSimulatorViewsGroupFromDefault = (defaultProfile: Profile): Profile => {
+  const fresh = buildFreshViewsGroupFromDefault(defaultProfile)
+  const simulator: Widget = {
+    hash: uuid4(),
+    name: 'Simulator',
+    component: WidgetType.Simulator,
+    position: { x: 0, y: 0 },
+    size: { width: 1, height: 1 },
+    options: {},
+  }
+  const [firstView] = fresh.views
+  firstView.widgets = [...firstView.widgets.filter((w) => w.component !== WidgetType.VideoPlayer), simulator]
   return fresh
 }
 
