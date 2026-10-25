@@ -110,8 +110,13 @@ if (model.startsWith('JSON')) {
     },
   })
 
+  let isLinked = false
   physicsChannel.onmessage = ({ data }) => {
     if (physicsSocket === undefined) return
+    if (!isLinked) {
+      isLinked = true
+      self.postMessage('running')
+    }
     physicsSocket.onmessage?.({ data: textEncoder.encode(data).buffer })
   }
 }
@@ -126,6 +131,7 @@ const sitl = await createModule({
     },
   ],
 })
+self.postMessage(model.startsWith('JSON') ? 'waiting-for-simulator' : 'running')
 
 const malloc = sitl.cwrap('ardupilot_malloc', 'number', ['number'])
 const read = sitl.cwrap('ardupilot_serial_read', 'number', ['number', 'number', 'number'])
