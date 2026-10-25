@@ -34,6 +34,7 @@ import {
   type UnassignedButtonFunction,
   MavlinkManualControlManager,
 } from '@/libs/joystick/protocols/mavlink-manual-control'
+import { isKeyboardDriving } from '@/libs/keyboard'
 import { canByPassCategory, EventCategory, slideToConfirm } from '@/libs/slide-to-confirm'
 import type { ArduPilot } from '@/libs/vehicle/ardupilot/ardupilot'
 import { CustomMode } from '@/libs/vehicle/ardupilot/ardurover'
@@ -1260,6 +1261,8 @@ export const useMainVehicleStore = defineStore('main-vehicle', () => {
     // Send MAVLink Manual Control message
     if (controllerStore.enableForwarding) {
       mavlinkManualControlManager.sendManualControl()
+    } else if (controllerStore.joysticks.size === 0 && isKeyboardDriving()) {
+      mavlinkManualControlManager.sendKeyboardManualControl()
     }
   }, 40)
   setInterval(() => sendGcsHeartbeat(), 1000)

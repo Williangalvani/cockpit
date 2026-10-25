@@ -3,14 +3,31 @@
     <template #title>Key mappings</template>
     <template #info>
       <div class="flex flex-col items-start px-5 font-medium">
-        <li>Keys work alongside the joystick, running Cockpit actions or setting data-lake variables.</li>
+        <li>
+          Keys work alongside the joystick, running Cockpit actions, setting data-lake variables, or holding vehicle
+          functions.
+        </li>
+        <li>
+          By default W and S move forward and back, A and D sideways, Space and Shift go up and down, the left and right
+          arrows turn, the up and down arrows tilt the camera, and comma and period open and close a gripper on actuator
+          1. Each held movement key adds half a stick to the joystick. With no joystick connected, the keyboard takes
+          control of the vehicle at the first of these key presses, and lets it go while Cockpit is hidden or this page
+          is open.
+        </li>
+        <li>
+          A vehicle function, like the camera tilt, is held for as long as its key. It needs a joystick button on the
+          vehicle set to that function, which the joystick mapping sets for the functions it uses.
+        </li>
         <li>
           A variable mapped to a key is 1 while the key is held and 0 once it is released. To move the vehicle, create a
           variable for the key and add it to an axis output's transforming function, like
           <code>{{ axisOutputExample }}</code> for a variable named "forward-key". Mapping a key to the joystick's own
           axis input instead makes the key and the stick overwrite each other.
         </li>
-        <li>Axis outputs only reach the vehicle while a joystick is connected. Cockpit actions work without one.</li>
+        <li>
+          Axis outputs only reach the vehicle while a joystick is connected, apart from the default movement keys above.
+          Cockpit actions and vehicle functions work without one.
+        </li>
         <li>
           Keys do nothing while you type in a field, while Ctrl, Alt or Cmd is held, or while this page is open. Space
           and Enter are left to a focused button, slider or list, and the arrow keys to a focused slider or list.
@@ -63,12 +80,18 @@ import { useBlueOsStorage } from '@/composables/settingsSyncer'
 import { useSnackbar } from '@/composables/snackbar'
 import { isAssignableToButton } from '@/libs/joystick/protocols'
 import { otherAvailableActions } from '@/libs/joystick/protocols/other'
-import { type KeyboardMapping, initializeKeyVariable, keyboardMappingKey, keyLabel } from '@/libs/keyboard'
+import {
+  type KeyboardMapping,
+  defaultKeyboardMapping,
+  initializeKeyVariable,
+  keyboardMappingKey,
+  keyLabel,
+} from '@/libs/keyboard'
 import { useControllerStore } from '@/stores/controller'
 import { type ProtocolAction, JoystickProtocol } from '@/types/joystick'
 
 // Written right away, as the keyboard listener reads the stored mapping on every key press
-const mapping = useBlueOsStorage<KeyboardMapping>(keyboardMappingKey, {}, { debounceMs: 0 })
+const mapping = useBlueOsStorage<KeyboardMapping>(keyboardMappingKey, defaultKeyboardMapping, { debounceMs: 0 })
 const controllerStore = useControllerStore()
 const { openSnackbar } = useSnackbar()
 
@@ -76,11 +99,15 @@ const mappedKeys = computed(() => Object.keys(mapping.value))
 
 const axisOutputExample = '{{inputs/mavlink/axis-x}} + {{user/custom/forward-key}} * 500'
 
-// MAVLink manual control button functions are left out, as they are tied to the joystick's buttons on the vehicle
+const keyProtocols = [
+  JoystickProtocol.CockpitAction,
+  JoystickProtocol.DataLakeVariable,
+  JoystickProtocol.MAVLinkManualControl,
+]
 const assignableActions = computed((): ProtocolAction[] => [
   otherAvailableActions.no_function,
   ...controllerStore.availableButtonActions
-    .filter((a) => [JoystickProtocol.CockpitAction, JoystickProtocol.DataLakeVariable].includes(a.protocol))
+    .filter((a) => keyProtocols.includes(a.protocol))
     .filter((a) => isAssignableToButton(a.id))
     .sort((a, b) => a.name.localeCompare(b.name)),
 ])
