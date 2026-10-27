@@ -58,6 +58,24 @@ const baseConfig = {
         workbox: {
           // Runs before workbox, so its fetch handler sees the requests first
           importScripts: ['cross-origin-isolation.js'],
+          // A precached index.html outlives a deploy and points at an entry chunk too big to precache, and gone from the
+          // server, so pages come from the network and the precache only answers them offline. Without directoryIndex
+          // the precache stops answering '/' with index.html itself.
+          navigateFallback: null,
+          directoryIndex: null,
+          runtimeCaching: [
+            {
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'cockpit-pages',
+                expiration: { maxEntries: 4 },
+                precacheFallback: { fallbackURL: 'index.html' },
+                // The browser HTTP cache (GitHub Pages sends max-age=600) would otherwise serve an old index.html
+                fetchOptions: { cache: 'no-cache' },
+              },
+            },
+          ],
         },
       }),
     !isLibrary && importCycleGuard(__dirname),
