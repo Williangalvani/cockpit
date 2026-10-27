@@ -20,6 +20,7 @@ import VueDraggableResizable from 'vue-draggable-resizable'
 import VueVirtualScroller from 'vue-virtual-scroller'
 
 import { initSecondaryVehicleConnections } from '@/composables/secondaryVehicles'
+import { initSitlVersionCheck } from '@/composables/sitlVersionCheck'
 import { initTraffic } from '@/composables/traffic'
 import { initializeActionAutoRun } from '@/libs/actions/auto-run'
 import { app_version } from '@/libs/cosmos'
@@ -110,6 +111,10 @@ initSecondaryVehicleConnections()
 
 // Boot the air and vessel traffic tracking so the contacts reach the data lake independently of the UI
 initTraffic()
+
+// Reload to the latest build when this page is an old copy, like a tab left open across a deploy, whose files no longer
+// match the simulator's
+initSitlVersionCheck()
 
 // Start logging as soon as the app is loaded to always have telemetry for videos
 datalogger.startLogging('cockpit-telemetry-logging')
