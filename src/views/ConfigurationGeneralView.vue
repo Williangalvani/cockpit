@@ -446,6 +446,27 @@
                   once. Every sender shares the same ids, so prefix them with your software's name.
                 </li>
                 <li>
+                  For georeferenced imagery sent many times a second, they can draw meshes of textured quads:
+                  <span class="font-mono">cockpit:setMapMesh</span> defines one (id, name, capacity, and the r8 or rgba8
+                  format and size of every quad's strip of texels), keeping its quads when sent again with the same
+                  layout and emptying it otherwise; <span class="font-mono">cockpit:setMapMeshQuads</span> writes quads
+                  into its slots; <span class="font-mono">cockpit:removeMapMeshQuads</span>,
+                  <span class="font-mono">cockpit:clearMapMesh</span> and
+                  <span class="font-mono">cockpit:removeMapMesh</span> manage it. Arrays are the base64 of their
+                  little-endian bytes. The fields, how quads are drawn and how to replay a mesh are documented on the
+                  matching helpers of the Cockpit widget API. Every sender shares the same ids, so prefix them with your
+                  software's name.
+                </li>
+                <li>
+                  A mesh command with a <span class="font-mono">requestId</span> of 1 to 256 characters is answered on
+                  the same connection, in order, with a <span class="font-mono">cockpit:mapMeshResult</span>; one with
+                  any other <span class="font-mono">requestId</span> is neither applied nor answered.
+                  <span class="font-mono">{{ exampleMapCapabilitiesWebSocketMessage }}</span> is answered with
+                  <span class="font-mono">cockpit:mapCapabilities</span>: the version (1), whether meshes are drawn
+                  (they need WebGL2), the limits and the formats. Meshes are kept in memory only: a reloaded Cockpit has
+                  none and a dropped connection keeps them, so set them again on every connection.
+                </li>
+                <li>
                   You can use data-lake variables to compose the URL, for example:
                   <span class="font-mono">{{ exampleGenericWebSocketUrl }}</span>
                 </li>
@@ -1113,6 +1134,7 @@ const exampleMapOverlayWebSocketMessage = JSON.stringify({
     },
   },
 })
+const exampleMapCapabilitiesWebSocketMessage = JSON.stringify({ type: 'cockpit:getMapCapabilities', requestId: '1' })
 const exampleJsonWebSocketMessage = JSON.stringify({
   WaterTemp: 23.5,
   Payload: { Temp: 21.2, Locked: true },
