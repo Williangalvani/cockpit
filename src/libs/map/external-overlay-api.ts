@@ -54,12 +54,41 @@ export const externalMapGeoTiffSchema = z.object({
   renderMode: z.enum(['grayscale', 'intensity', 'bathymetry']).default('grayscale'),
 })
 
-const maxMeshCapacity = 1 << 20
-const maxMeshWriteQuads = 4096
-// Larger messages make base64 decoding and validation a long task on the main thread.
-const maxMeshMessageBytes = 2 * 1024 * 1024
-// WebGL2's guaranteed MAX_TEXTURE_SIZE, so every strip fits a texture page on every device.
-const maxStripSide = 2048
+/**
+ * Texel formats a mesh's strips can have
+ */
+export const externalMapMeshTexelFormats = ['r8', 'rgba8'] as const
+
+/**
+ * Limits on what a sender can ask of the map meshes
+ */
+export const externalMapMeshLimits = {
+  /**
+   * Most quads a mesh holds
+   */
+  maxCapacity: 1 << 20,
+  /**
+   * Most quads one `cockpit:setMapMeshQuads` writes
+   */
+  maxQuadsPerMessage: 4096,
+  /**
+   * Most bytes of arrays one message carries, before base64. Larger messages make decoding and validating them a
+   * long task on the main thread.
+   */
+  maxMessageBytes: 2 * 1024 * 1024,
+  /**
+   * Widest and tallest a quad's strip of texels can be: WebGL2's guaranteed MAX_TEXTURE_SIZE, so every strip fits a
+   * texture page on every device
+   */
+  maxTexelSide: 2048,
+} as const
+
+const {
+  maxCapacity: maxMeshCapacity,
+  maxQuadsPerMessage: maxMeshWriteQuads,
+  maxMessageBytes: maxMeshMessageBytes,
+  maxTexelSide: maxStripSide,
+} = externalMapMeshLimits
 // Guards the GPU: a million quads spanning the screen at high zoom would be a million full-screen fills.
 const maxQuadDiagonalMetres = 20_000
 const maxMeshLatitude = 85.05
@@ -105,7 +134,7 @@ export const externalMapMeshSchema = z
     name: z.string().min(1),
     capacity: z.number().int().min(1).max(maxMeshCapacity),
     texels: z.object({
-      format: z.enum(['r8', 'rgba8']),
+      format: z.enum(externalMapMeshTexelFormats),
       width: z.number().int().min(1).max(maxStripSide),
       height: z.number().int().min(1).max(maxStripSide),
     }),
@@ -196,7 +225,7 @@ export const externalMapOverlayCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('cockpit:removeMapMeshQuads'),
     id: externalMapOverlayIdSchema,
     first: z.number().int().min(0),
-    count: z.number().int().min(1),
+    count: z.number().int().min(1).max(maxMeshCapacity),
   }),
   z.object({ type: z.literal('cockpit:clearMapMesh'), id: externalMapOverlayIdSchema }),
   z.object({ type: z.literal('cockpit:removeMapMesh'), id: externalMapOverlayIdSchema }),
