@@ -5,6 +5,7 @@ import { type ComputedRef, computed, ref } from 'vue'
 import { openSnackbar } from '@/composables/snackbar'
 import { listenToGenericWebSocketJsonMessages } from '@/libs/generic-websocket'
 import { type MapMeshWrittenSlots, MapMeshStore } from '@/libs/map/external-map-meshes'
+import { mapMeshGlRenderer } from '@/libs/map/external-map-meshes-gl'
 import { mapMeshStats, recordMapMeshMs, setMapMeshCpuByteSize } from '@/libs/map/external-map-meshes-stats'
 import {
   type ExternalMapMeshResult,
@@ -12,6 +13,7 @@ import {
   type ExternalMapOverlayFeature,
   type ExternalMapReply,
   type ValidatedMapGeoTiff,
+  externalMapCapabilities,
   externalMapOverlayCommandSchema,
   externalMapRequestIdSchema,
   isExternalMapOverlayCommand,
@@ -80,7 +82,7 @@ export interface ExternalMapOverlaysState {
   removeOverlay: (id: string) => void
   /**
    * Applies a map overlay command from external software, ignoring any other message. Mesh commands carrying a
-   * `requestId` are answered through `reply`.
+   * `requestId`, and capability queries, are answered through `reply`.
    */
   handleExternalMapOverlayMessage: (message: unknown, reply?: ExternalMapReply) => void
 }
@@ -354,8 +356,14 @@ const createState = (): ExternalMapOverlaysState => {
     // Applied once the saved overlays are read, so finishing that read never undoes a newer command.
     storedOverlaysLoaded
       .then(() => {
-        if (isMeshCommand) applyMeshCommand(parsed.data, sentMeshId(sent), answer)
-        else applyCommand(parsed.data)
+        const command = parsed.data
+        // Creates the renderer every map shares, which a sender asking is about to need anyway.
+        if (command.type === 'cockpit:getMapCapabilities') {
+          reply?.(externalMapCapabilities(command.requestId, mapMeshGlRenderer(meshes) !== undefined))
+          return
+        }
+        if (isMeshCommand) applyMeshCommand(command, sentMeshId(sent), answer)
+        else applyCommand(command)
       })
       .catch((error) => console.warn(`[ExternalMapOverlays] Ignoring command. ${messageFromError(error)}`))
   }

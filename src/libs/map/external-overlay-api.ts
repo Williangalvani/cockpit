@@ -55,6 +55,12 @@ export const externalMapGeoTiffSchema = z.object({
 })
 
 /**
+ * Version of the map mesh commands. It grows only when a change would break a sender written for an older one; new
+ * optional fields do not change it, since unknown fields are ignored.
+ */
+export const externalMapMeshApiVersion = 1
+
+/**
  * Texel formats a mesh's strips can have
  */
 export const externalMapMeshTexelFormats = ['r8', 'rgba8'] as const
@@ -243,6 +249,7 @@ export const externalMapOverlayCommandSchema = z.discriminatedUnion('type', [
     id: externalMapOverlayIdSchema,
     palette: paletteSchema,
   }),
+  z.object({ type: z.literal('cockpit:getMapCapabilities'), requestId: externalMapRequestIdSchema }),
 ])
 
 /**
@@ -333,9 +340,57 @@ export interface ExternalMapMeshResult {
 }
 
 /**
+ * What this Cockpit offers external software drawing map meshes, answering `cockpit:getMapCapabilities`
+ */
+export interface ExternalMapCapabilities {
+  /**
+   * Kind of message
+   */
+  type: 'cockpit:mapCapabilities'
+  /**
+   * The query's `requestId`
+   */
+  requestId: string
+  /**
+   * Map meshes
+   */
+  meshes: typeof externalMapMeshLimits & {
+    /**
+     * Version of the mesh commands, {@link externalMapMeshApiVersion}
+     */
+    version: number
+    /**
+     * Whether this computer draws meshes. Without WebGL2 they are still kept and answered, but not shown.
+     */
+    drawn: boolean
+    /**
+     * Texel formats a mesh's strips can have
+     */
+    formats: (typeof externalMapMeshTexelFormats)[number][]
+  }
+}
+
+/**
  * Sends a message back to the software a map command came from, through the same iframe or WebSocket
  */
-export type ExternalMapReply = (message: ExternalMapMeshResult) => void
+export type ExternalMapReply = (message: ExternalMapMeshResult | ExternalMapCapabilities) => void
+
+/**
+ * Answers a `cockpit:getMapCapabilities`
+ * @param {string} queryId - The query's `requestId`
+ * @param {boolean} drawn - Whether this computer draws meshes
+ * @returns {ExternalMapCapabilities} The answer
+ */
+export const externalMapCapabilities = (queryId: string, drawn: boolean): ExternalMapCapabilities => ({
+  type: 'cockpit:mapCapabilities',
+  requestId: queryId,
+  meshes: {
+    version: externalMapMeshApiVersion,
+    drawn,
+    ...externalMapMeshLimits,
+    formats: [...externalMapMeshTexelFormats],
+  },
+})
 
 /**
  * Tells whether a message is meant as a map overlay command, before validating it.

@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import type { ExternalMapMeshResult } from '@/libs/map/external-overlay-api'
+import type { ExternalMapCapabilities, ExternalMapMeshResult } from '@/libs/map/external-overlay-api'
 
 vi.mock('@/stores/mission', () => ({ useMissionStore: () => ({ mapOverlays: [] }) }))
 vi.mock('@/composables/snackbar', () => ({ openSnackbar: vi.fn() }))
 vi.mock('@/libs/generic-websocket', () => ({ listenToGenericWebSocketJsonMessages: vi.fn() }))
 vi.mock('@/libs/map/overlay-import', () => ({ deleteStoredOverlay: vi.fn(), importGeoTiffFile: vi.fn() }))
 vi.mock('@/libs/utils-data-lake', () => ({ replaceDataLakeInputsInString: (text: string) => text }))
+let hasWebGl2 = true
+vi.mock('@/libs/map/external-map-meshes-gl', () => ({ mapMeshGlRenderer: () => (hasWebGl2 ? {} : undefined) }))
 vi.mock('localforage', () => ({
   default: {
     INDEXEDDB: 'indexeddb',
@@ -36,13 +38,53 @@ const mesh = (id: string, capacity = 4): Record<string, unknown> => ({
 
 // Commands wait for the saved overlays to be read, so their answers arrive a few microtasks later.
 const send = async (...messages: Record<string, unknown>[]): Promise<ExternalMapMeshResult[]> => {
-  const answers: ExternalMapMeshResult[] = []
+  const answers: (ExternalMapMeshResult | ExternalMapCapabilities)[] = []
   messages.forEach((message) => handleExternalMapOverlayMessage(message, (answer) => answers.push(answer)))
   await new Promise((resolve) => setTimeout(resolve))
-  return answers
+  return answers as ExternalMapMeshResult[]
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  hasWebGl2 = true
+})
+
+describe('cockpit:getMapCapabilities', () => {
+  test('tells the mesh version, limits and formats, and whether meshes are drawn', async () => {
+    const [capabilities] = (await send({ type: 'cockpit:getMapCapabilities', requestId: 'caps' })) as unknown[]
+    expect(capabilities).toEqual({
+      type: 'cockpit:mapCapabilities',
+      requestId: 'caps',
+      meshes: {
+        version: 1,
+        drawn: true,
+        maxCapacity: 1 << 20,
+        maxQuadsPerMessage: 4096,
+        maxMessageBytes: 2 * 1024 * 1024,
+        maxTexelSide: 2048,
+        formats: ['r8', 'rgba8'],
+      },
+    })
+  })
+
+  test('says meshes are not drawn without WebGL2, while mesh commands are still applied', async () => {
+    hasWebGl2 = false
+    const answers = await send(
+      { type: 'cockpit:getMapCapabilities', requestId: 'caps' },
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: mesh('capabilities-undrawn') },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'write', id: 'capabilities-undrawn', ...quads(2) }
+    )
+    expect((answers[0] as unknown as ExternalMapCapabilities).meshes.drawn).toBe(false)
+    expect(answers[1]).toMatchObject({ ok: true })
+    expect(answers[2]).toMatchObject({ ok: true, first: 0, count: 2, head: 2 })
+  })
+
+  test('needs a requestId, since its only purpose is the answer', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    expect(await send({ type: 'cockpit:getMapCapabilities' })).toEqual([])
+    expect(warn).toHaveBeenCalledOnce()
+  })
+})
 
 describe('mesh command answers', () => {
   test('tell an auto-index sender which slots it wrote, wrapping at the capacity', async () => {

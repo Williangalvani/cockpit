@@ -4,6 +4,7 @@ import {
   type ValidatedMapMeshQuads,
   externalMapMeshLimits,
   externalMapOverlayCommandSchema,
+  isExternalMapOverlayCommand,
 } from '@/libs/map/external-overlay-api'
 
 type Quads = Pick<ValidatedMapMeshQuads, 'corners' | 'uv' | 'texels'>
@@ -157,6 +158,13 @@ describe('requestId', () => {
       expect(externalMapOverlayCommandSchema.safeParse({ ...command, requestId }).success).toBe(false)
     }
     expect(externalMapOverlayCommandSchema.safeParse({ ...command, requestId: 'x'.repeat(256) }).success).toBe(true)
+  })
+
+  it('is required on cockpit:getMapCapabilities, which is recognised as a map command', () => {
+    const query = { type: 'cockpit:getMapCapabilities', requestId: 'r-1' }
+    expect(isExternalMapOverlayCommand(query)).toBe(true)
+    expect(externalMapOverlayCommandSchema.safeParse(query).success).toBe(true)
+    expect(externalMapOverlayCommandSchema.safeParse({ type: query.type }).success).toBe(false)
   })
 
   it('is dropped from the GeoJSON overlay commands, which are never answered', () => {
