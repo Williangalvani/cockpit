@@ -1,3 +1,4 @@
+import type { ExternalMapMesh, ExternalMapMeshQuads } from '@/libs/map/external-map-mesh-api'
 import type { ExternalPoi, ExternalPoiUpdate } from '@/libs/poi/external-api'
 
 import { CallbackRateLimiter } from './callback-rate-limiter'
@@ -72,4 +73,69 @@ export function updatePointOfInterest(poi: ExternalPoiUpdate): void {
  */
 export function removePointOfInterest(id: string): void {
   window.parent.postMessage({ type: 'cockpit:removePointOfInterest', id }, '*')
+}
+
+/**
+ * Creates a mesh of textured quads on Cockpit's maps, for data sent many times a second such as a sonar's pings.
+ * Sending it again with the same capacity and texels keeps its quads. Meshes are kept in memory only, so send it
+ * again, and its quads, after Cockpit reloads. Needs WebGL2.
+ * @param {ExternalMapMesh} mesh - Id, name, capacity in quads, and the format and size of every quad's strip of
+ * texels. An r8 mesh's texels index into its palette. Every sender shares the same ids, so prefix the id with your
+ * extension's name
+ * @example
+ * ```typescript
+ * setMapMesh({ id: 'my-extension-sonar', name: 'Sonar', capacity: 4096, texels: { format: 'r8', width: 200, height: 1 } })
+ * ```
+ */
+export function setMapMesh(mesh: ExternalMapMesh): void {
+  window.parent.postMessage({ type: 'cockpit:setMapMesh', mesh }, '*')
+}
+
+/**
+ * Writes quads into a map mesh, replacing those in their slots. The typed arrays' buffers are transferred to
+ * Cockpit, so they are unusable here afterwards.
+ * @param {string} id - The id of the mesh
+ * @param {ExternalMapMeshQuads} quads - Per quad: 4 lon/lat corners in ring order, 4 uv in texels of the quad's
+ * strip, its strip of texels, and an optional RGBA tint. Without `first`, they follow the previous write,
+ * wrapping around at the mesh's capacity
+ */
+export function setMapMeshQuads(id: string, quads: ExternalMapMeshQuads): void {
+  const buffers = Object.values(quads).flatMap((value) => (ArrayBuffer.isView(value) ? [value.buffer] : []))
+  const transfer = [...new Set(buffers)].filter((buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer)
+  window.parent.postMessage({ type: 'cockpit:setMapMeshQuads', id, ...quads }, '*', transfer)
+}
+
+/**
+ * Empties consecutive slots of a map mesh, which then draw nothing.
+ * @param {string} id - The id of the mesh
+ * @param {number} first - The first slot
+ * @param {number} count - How many slots
+ */
+export function removeMapMeshQuads(id: string, first: number, count: number): void {
+  window.parent.postMessage({ type: 'cockpit:removeMapMeshQuads', id, first, count }, '*')
+}
+
+/**
+ * Replaces the palette of an r8 map mesh, recolouring it without sending its quads again.
+ * @param {string} id - The id of the mesh
+ * @param {Uint8Array} palette - 256 RGBA entries, straight alpha
+ */
+export function setMapMeshPalette(id: string, palette: Uint8Array): void {
+  window.parent.postMessage({ type: 'cockpit:setMapMeshPalette', id, palette }, '*')
+}
+
+/**
+ * Empties every slot of a map mesh, keeping the mesh to be written to again.
+ * @param {string} id - The id of the mesh
+ */
+export function clearMapMesh(id: string): void {
+  window.parent.postMessage({ type: 'cockpit:clearMapMesh', id }, '*')
+}
+
+/**
+ * Removes a map mesh from Cockpit.
+ * @param {string} id - The id of the mesh
+ */
+export function removeMapMesh(id: string): void {
+  window.parent.postMessage({ type: 'cockpit:removeMapMesh', id }, '*')
 }
