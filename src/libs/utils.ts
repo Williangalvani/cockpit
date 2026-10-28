@@ -458,6 +458,18 @@ export const messageFromError = (error: unknown): string => {
 }
 
 /**
+ * Answers a message posted by another window, such as an embedded iframe, posting only to the sender's origin.
+ * @param {MessageEvent} event The received message.
+ * @returns {(message: unknown) => void} Posts a message back to the window that sent it.
+ */
+export const replyToMessageSender = (event: MessageEvent): ((message: unknown) => void) => {
+  // Pages loaded from file://, like in Electron, or sandboxed have the opaque origin 'null', which postMessage
+  // rejects as a target.
+  const targetOrigin = event.origin && event.origin !== 'null' ? event.origin : '*'
+  return (message) => (event.source as Window | null)?.postMessage(message, targetOrigin)
+}
+
+/**
  * Deep-clone a JSON-representable value into plain data, dropping any Vue reactivity proxy on it or
  * nested inside it. Prefer this over `structuredClone`, which throws on reactive proxies. Functions
  * and `undefined` values are dropped, as JSON cannot represent them. The walk reads through proxies,
