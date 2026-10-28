@@ -50,9 +50,9 @@ const paletteSchema = typedArrayOrBase64(Uint8Array).refine((palette) => palette
 })
 
 /**
- * Mesh of textured quads external software draws on Cockpit's maps, such as a sonar's pings. It has `capacity`
- * slots the sender writes quads into, each quad carrying its own `width` x `height` strip of texels. A mesh is kept
- * in memory only: the sender re-sends it to a Cockpit that connects later.
+ * Mesh of textured quads external software draws on Cockpit's maps, for imagery sent many times a second. It has
+ * `capacity` slots the sender writes quads into, each quad carrying its own `width` x `height` strip of texels. A
+ * mesh is kept in memory only: the sender re-sends it to a Cockpit that connects later.
  */
 export const externalMapMeshSchema = z
   .object({

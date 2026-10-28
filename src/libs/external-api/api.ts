@@ -76,15 +76,15 @@ export function removePointOfInterest(id: string): void {
 }
 
 /**
- * Creates a mesh of textured quads on Cockpit's maps, for data sent many times a second such as a sonar's pings.
- * Sending it again with the same capacity and texels keeps its quads. Meshes are kept in memory only, so send it
- * again, and its quads, after Cockpit reloads. Needs WebGL2.
+ * Creates a mesh of textured quads on Cockpit's maps, for georeferenced imagery sent many times a second. Sending it
+ * again with the same capacity and texels keeps its quads. Meshes are kept in memory only, so send it again, and its
+ * quads, after Cockpit reloads. Needs WebGL2.
  * @param {ExternalMapMesh} mesh - Id, name, capacity in quads, and the format and size of every quad's strip of
  * texels. An r8 mesh's texels index into its palette. Every sender shares the same ids, so prefix the id with your
  * extension's name
  * @example
  * ```typescript
- * setMapMesh({ id: 'my-extension-sonar', name: 'Sonar', capacity: 4096, texels: { format: 'r8', width: 200, height: 1 } })
+ * setMapMesh({ id: 'my-extension-scan', name: 'Scan', capacity: 4096, texels: { format: 'r8', width: 200, height: 1 } })
  * ```
  */
 export function setMapMesh(mesh: ExternalMapMesh): void {
