@@ -447,14 +447,34 @@
                 </li>
                 <li>
                   For georeferenced imagery sent many times a second, create a mesh of textured quads with
-                  <span class="font-mono">cockpit:setMapMesh</span> (id, name, capacity, texel format and size), then
-                  write quads with <span class="font-mono">cockpit:setMapMeshQuads</span>: corners as float64
-                  longitude/latitude pairs, uv as float32 and texels as bytes, each the base64 of its little-endian
-                  bytes. <span class="font-mono">cockpit:removeMapMeshQuads</span>,
+                  <span class="font-mono">cockpit:setMapMesh</span>: id, name, capacity (up to
+                  {{ externalMapMeshLimits.maxCapacity }} slots) and the format (r8 or rgba8), width and height (up to
+                  {{ externalMapMeshLimits.maxTexelSide }}) of every quad's strip of texels, plus an optional filter,
+                  opacity and, for r8, a palette of 256 straight-alpha RGBA entries, where zero alpha lets what is
+                  underneath show through. Sent again with the same layout, it keeps its quads. Write quads into slots
+                  with <span class="font-mono">cockpit:setMapMeshQuads</span> at <span class="font-mono">first</span>,
+                  or after the previous write when omitted, wrapping around: per quad, 4 float64 longitude/latitude
+                  corners in ring order, 4 float32 uv in texels of its own strip (centres at +0.5), its strip row by row
+                  and an optional RGBA tint, each array the base64 of its little-endian bytes, at most
+                  {{ externalMapMeshLimits.maxQuadsPerMessage }} quads and
+                  {{ externalMapMeshLimits.maxMessageBytes / 1024 / 1024 }} MiB per message. Quads are split along their
+                  corner 1 to 3 diagonal and blended in slot order from the next slot to write, newest on top; their
+                  colour is straight alpha times the tint, and the opacity fades the whole mesh once.
+                  <span class="font-mono">cockpit:removeMapMeshQuads</span>,
                   <span class="font-mono">cockpit:clearMapMesh</span>,
                   <span class="font-mono">cockpit:setMapMeshPalette</span> and
-                  <span class="font-mono">cockpit:removeMapMesh</span> manage it. Meshes are kept in memory only, so
-                  send them again when Cockpit reconnects, and need WebGL2.
+                  <span class="font-mono">cockpit:removeMapMesh</span> manage it.
+                </li>
+                <li>
+                  Any mesh command carrying a <span class="font-mono">requestId</span> is answered on the same
+                  connection, in order, with a <span class="font-mono">cockpit:mapMeshResult</span>: ok or the error,
+                  the mesh's capacity and next slot to write, and the slots a write used. Ask what this Cockpit offers
+                  with <span class="font-mono">{{ exampleMapCapabilitiesWebSocketMessage }}</span
+                  >: it answers with <span class="font-mono">cockpit:mapCapabilities</span>, whose
+                  <span class="font-mono">meshes</span> hold the version (1), whether they are drawn (they need WebGL2),
+                  the limits and the formats. Unknown fields are ignored. Meshes are kept in memory only, so on every
+                  connection ask for the capabilities, set the mesh, clear it if you restarted your slot numbering, and
+                  replay the quads to show, oldest first, with explicit slots.
                 </li>
                 <li>
                   You can use data-lake variables to compose the URL, for example:
@@ -615,6 +635,7 @@ import {
   listenToGenericWebSocketConnections,
   removeGenericWebSocketConnection,
 } from '@/libs/generic-websocket'
+import { externalMapMeshLimits } from '@/libs/map/external-overlay-api'
 import { isElectron, isValidNetworkAddress } from '@/libs/utils'
 import { replaceDataLakeInputsInString } from '@/libs/utils-data-lake'
 import { reloadCockpitAndWarnUser } from '@/libs/utils-vue'
@@ -1124,6 +1145,7 @@ const exampleMapOverlayWebSocketMessage = JSON.stringify({
     },
   },
 })
+const exampleMapCapabilitiesWebSocketMessage = JSON.stringify({ type: 'cockpit:getMapCapabilities', requestId: '1' })
 const exampleJsonWebSocketMessage = JSON.stringify({
   WaterTemp: 23.5,
   Payload: { Temp: 21.2, Locked: true },
