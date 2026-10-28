@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ValidatedMapMeshQuads, externalMapMeshCommandSchema } from '@/libs/map/external-map-mesh-api'
+import {
+  type ValidatedMapMeshQuads,
+  externalMapMeshCommandSchema,
+  externalMapMeshLimits,
+} from '@/libs/map/external-map-mesh-api'
 
 type Quads = Pick<ValidatedMapMeshQuads, 'corners' | 'uv' | 'texels'>
 
@@ -109,5 +113,28 @@ describe('cockpit:setMapMeshQuads', () => {
   it('rejects messages over 2 MiB', () => {
     const { corners, uv } = quads(1)
     expect(firstIssue(parseQuads({ corners, uv, texels: new Uint8Array(2 * 1024 * 1024) }))).toContain('bytes')
+  })
+})
+
+describe('cockpit:removeMapMeshQuads', () => {
+  const remove = (count: number): boolean =>
+    externalMapMeshCommandSchema.safeParse({ type: 'cockpit:removeMapMeshQuads', id: 'test-mesh', first: 0, count })
+      .success
+
+  it('removes at most a whole mesh', () => {
+    expect(remove(externalMapMeshLimits.maxCapacity)).toBe(true)
+    expect(remove(externalMapMeshLimits.maxCapacity + 1)).toBe(false)
+    expect(remove(0)).toBe(false)
+  })
+})
+
+describe('externalMapMeshLimits', () => {
+  it('are the limits the schema enforces', () => {
+    expect(externalMapMeshLimits).toEqual({
+      maxCapacity: 1 << 20,
+      maxQuadsPerMessage: 4096,
+      maxMessageBytes: 2 * 1024 * 1024,
+      maxTexelSide: 2048,
+    })
   })
 })
