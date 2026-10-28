@@ -190,6 +190,22 @@
                 />
               </v-col>
             </v-row>
+            <v-slider
+              v-if="externalMeshCount > 0"
+              v-model="widget.options.meshOpacity"
+              label="Mesh opacity"
+              color="white"
+              :min="0"
+              :max="1"
+              :step="0.05"
+              hide-details
+              class="mt-2"
+              @end="onMeshOpacityCommitted"
+            >
+              <template #append>
+                <span class="text-sm w-[48px] text-right">{{ Math.round(widget.options.meshOpacity * 100) }}%</span>
+              </template>
+            </v-slider>
           </template>
         </ExpansiblePanel>
       </v-card-text>
@@ -275,6 +291,7 @@ import { confirmRemoveBaseStation, useBaseStation } from '@/composables/baseStat
 import { useBaseStationOverlay } from '@/composables/baseStation/useBaseStationOverlay'
 import { useInteractionDialog } from '@/composables/interactionDialog'
 import { useCustomTileProviders } from '@/composables/map/useCustomTileProviders'
+import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
 import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useMapAutoResize } from '@/composables/map/useMapAutoResize'
 import { useMapBoxZoom } from '@/composables/map/useMapBoxZoom'
@@ -648,6 +665,7 @@ onBeforeMount(() => {
     showHomeArrow: true,
     showVehicleArrow: true,
     showBaseStationArrow: true,
+    meshOpacity: 1,
   }
   widget.value.options = { ...defaultOptions, ...widget.value.options }
   if (isFlightVisible.value) targetFollower.enableAutoUpdate()
@@ -668,7 +686,12 @@ const overlayLoadingIds = mapOverlays.loadingIds
 const overlaysDialogOpen = ref(false)
 
 // Draws the meshes external software (BlueOS extensions, embedded pages) sent onto this map
-const { init: initExternalMeshLayers, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
+const { init: initExternalMeshLayers, setMeshOpacity, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
+const { meshCount: externalMeshCount } = useExternalMapMeshes()
+watch(() => widget.value.options.meshOpacity, setMeshOpacity, { immediate: true })
+const onMeshOpacityCommitted = (value: number): void => {
+  logUserAction(`Set the map widget mesh opacity to ${Math.round(value * 100)}%`)
+}
 
 // Registers user-defined custom tile providers (URL templates and imported archives) as selectable base layers
 const { init: initCustomTileProviders, destroy: destroyCustomTileProviders } = useCustomTileProviders()
