@@ -446,7 +446,7 @@
                   once. Every sender shares the same ids, so prefix them with your software's name.
                 </li>
                 <li>
-                  For data sent many times a second, such as sonar pings, create a mesh of textured quads with
+                  For georeferenced imagery sent many times a second, create a mesh of textured quads with
                   <span class="font-mono">cockpit:setMapMesh</span> (id, name, capacity, texel format and size), then
                   write quads with <span class="font-mono">cockpit:setMapMeshQuads</span>: corners as float64
                   longitude/latitude pairs, uv as float32 and texels as bytes, each the base64 of its little-endian
