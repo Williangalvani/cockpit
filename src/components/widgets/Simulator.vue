@@ -87,7 +87,7 @@ import { openSnackbar } from '@/composables/snackbar'
 import { usePointsOfInterest } from '@/composables/usePointsOfInterest'
 import { type SitlStage, getSitlHome, onSitlStageChange, sitlPhysicsChannelId } from '@/libs/connection/sitl-connection'
 import { versionedSimulatorUrl } from '@/libs/sitl-version'
-import { constrain } from '@/libs/utils'
+import { constrain, replyToMessageSender } from '@/libs/utils'
 import { useAppInterfaceStore } from '@/stores/appInterface'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
 import type { Widget } from '@/types/widgets'
@@ -150,7 +150,7 @@ const forwardSimulatorMessage = (event: MessageEvent): void => {
   // Every simulator widget hears every message, so only the one embedding the sender applies a command
   if (event.source !== simulatorFrame.value?.contentWindow) return
   handleExternalPoiMessage(event.data)
-  handleExternalMapMeshMessage(event.data)
+  handleExternalMapMeshMessage(event.data, replyToMessageSender(event))
   savePing360Log(event.data)
 }
 
