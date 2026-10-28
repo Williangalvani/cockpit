@@ -446,6 +446,46 @@
                   once. Every sender shares the same ids, so prefix them with your software's name.
                 </li>
                 <li>
+                  For georeferenced imagery sent many times a second, create a mesh of textured quads on the map with
+                  <span class="font-mono">cockpit:setMapMesh</span>: id, name, capacity (up to
+                  {{ externalMapMeshLimits.maxCapacity }} slots) and the format (r8 or rgba8), width and height (each
+                  side up to {{ externalMapMeshLimits.maxTexelSide }} texels, and at most
+                  {{ externalMapMeshLimits.maxStripBytes }} bytes so that one untinted quad with its corners and uv fits
+                  in a message; 4 bytes less with a tint) of every quad's strip of texels, plus an optional filter,
+                  opacity and, for r8, a palette of 256 straight-alpha RGBA entries, where zero alpha lets what is
+                  underneath show through. Sent again with the same layout, it keeps its quads; a changed capacity,
+                  format or strip size empties it, and a refused definition keeps the old quads. Write quads into slots
+                  with <span class="font-mono">cockpit:setMapMeshQuads</span> at <span class="font-mono">first</span>,
+                  or after the previous write when omitted, wrapping around: per quad, 4 float64 longitude/latitude
+                  corners in ring order, 4 float32 uv in texels of its own strip (centers at +0.5), its strip row by row
+                  and an optional RGBA tint, each array the base64 of its little-endian bytes, at most
+                  {{ externalMapMeshLimits.maxQuadsPerMessage }} quads and
+                  {{ externalMapMeshLimits.maxMessageBytes / 1024 / 1024 }} MiB per message. Quads are split along their
+                  corner 1 to 3 diagonal and drawn in slot order, starting from the next slot to be written: the first
+                  to cover a pixel is drawn as it is and each later one mixes into it with 60% weight, transparent
+                  texels included, so repeated identical readings draw as one; a quad's color is its texel's (or, for
+                  r8, its palette entry's) straight-alpha RGBA times its tint, and the mesh opacity fades the whole mesh
+                  once. <span class="font-mono">cockpit:removeMapMeshQuads</span>,
+                  <span class="font-mono">cockpit:clearMapMesh</span>,
+                  <span class="font-mono">cockpit:setMapMeshPalette</span> and
+                  <span class="font-mono">cockpit:removeMapMesh</span> manage it. Every sender shares the same ids, so
+                  prefix them with your software's name.
+                </li>
+                <li>
+                  Any mesh command carrying a <span class="font-mono">requestId</span>, of 1 to 256 characters, is
+                  answered on the same connection, in order, with a
+                  <span class="font-mono">cockpit:mapMeshResult</span>: ok or the error, the mesh's capacity and next
+                  slot to write, and the slots a write used. Ask which map mesh features and limits this Cockpit
+                  supports with <span class="font-mono">{{ exampleMapCapabilitiesWebSocketMessage }}</span
+                  >: it answers with <span class="font-mono">cockpit:mapCapabilities</span>, whose
+                  <span class="font-mono">meshes</span> field holds the version (1), whether meshes are drawn (they need
+                  WebGL2), the limits and the formats. Unknown fields are ignored. Meshes are kept in memory only: a
+                  reloaded Cockpit has none, while after a dropped connection they stay as they were, without what was
+                  sent in between, and no mesh is removed when a connection closes. So, on every connection, ask for the
+                  capabilities and set the mesh; then either clear it and replay the quads to show, oldest first, with
+                  explicit slots (regardless of your slot numbering), or resend every write and removal it missed.
+                </li>
+                <li>
                   You can use data-lake variables to compose the URL, for example:
                   <span class="font-mono">{{ exampleGenericWebSocketUrl }}</span>
                 </li>
@@ -604,6 +644,7 @@ import {
   listenToGenericWebSocketConnections,
   removeGenericWebSocketConnection,
 } from '@/libs/generic-websocket'
+import { externalMapMeshLimits } from '@/libs/map/external-map-mesh-api'
 import { isElectron, isValidNetworkAddress } from '@/libs/utils'
 import { replaceDataLakeInputsInString } from '@/libs/utils-data-lake'
 import { reloadCockpitAndWarnUser } from '@/libs/utils-vue'
@@ -1113,6 +1154,7 @@ const exampleMapOverlayWebSocketMessage = JSON.stringify({
     },
   },
 })
+const exampleMapCapabilitiesWebSocketMessage = JSON.stringify({ type: 'cockpit:getMapCapabilities', requestId: '1' })
 const exampleJsonWebSocketMessage = JSON.stringify({
   WaterTemp: 23.5,
   Payload: { Temp: 21.2, Locked: true },
