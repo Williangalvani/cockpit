@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest'
 
-import { isRecentIsolationReload } from '@/libs/connection/sitl-connection'
+import { getSitlHome, isRecentIsolationReload, parseSitlHome } from '@/libs/connection/sitl-connection'
 
 // The codec's WebAssembly package does not load under Node
 vi.mock('@/libs/connection/raw-mavlink-codec', () => ({ RawMavlinkCodec: vi.fn() }))
@@ -21,4 +21,19 @@ test('isRecentIsolationReload', () => {
   expect(isRecentIsolationReload(null, reloadedAt)).toBe(false)
   expect(isRecentIsolationReload('true', reloadedAt)).toBe(false)
   expect(isRecentIsolationReload('', reloadedAt)).toBe(false)
+})
+
+test('parseSitlHome', () => {
+  expect(parseSitlHome('33.810313,-118.393867,0,270')).toEqual({ lat: 33.810313, lon: -118.393867 })
+  expect(parseSitlHome('-27.598524,-48.459752')).toEqual({ lat: -27.598524, lon: -48.459752 })
+  expect(parseSitlHome('33.8')).toBe(null)
+  expect(parseSitlHome(',-118.39,0,0')).toBe(null)
+  expect(parseSitlHome('north,east')).toBe(null)
+  expect(parseSitlHome('91,0,0,0')).toBe(null)
+  expect(parseSitlHome('0,181,0,0')).toBe(null)
+  expect(parseSitlHome('')).toBe(null)
+})
+
+test('getSitlHome is null without a sitl:// connection', () => {
+  expect(getSitlHome()).toBe(null)
 })

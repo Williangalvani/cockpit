@@ -1,3 +1,4 @@
+import type { SitlHome } from '@/libs/connection/sitl-connection'
 import { isElectron } from '@/libs/utils'
 
 /**
@@ -137,17 +138,34 @@ export const checkSitlVersion = (): Promise<SitlVersionStatus> => {
 }
 
 /**
+ * Settings Cockpit's own BlueSim reads from its URL
+ */
+export interface SimulatorUrlOptions {
+  /**
+   * Where the SITL started the vehicle, which BlueSim places what it draws on the map around
+   */
+  home?: SitlHome | null
+  /**
+   * Whether BlueSim simulates a Ping360 sonar
+   */
+  ping360?: boolean
+}
+
+/**
  * Versions the URL of the BlueSim export Cockpit ships, so its page is not an old cached copy,
  * and points it at this page's physics channel
  * @param {string} source The simulator URL, relative to Cockpit's
  * @param {string} channel The id of this page's physics channel with the SITL worker
- * @returns {string} The absolute URL, with the BlueSim version and channel when it is Cockpit's own BlueSim
+ * @param {SimulatorUrlOptions} options Settings passed to Cockpit's own BlueSim
+ * @returns {string} The absolute URL, with the BlueSim version, channel and settings when it is Cockpit's own BlueSim
  */
-export const versionedSimulatorUrl = (source: string, channel: string): string => {
+export const versionedSimulatorUrl = (source: string, channel: string, options: SimulatorUrlOptions = {}): string => {
   const url = new URL(source, document.baseURI)
   const blueSimUrl = new URL('bluesim/index.html', document.baseURI)
   if (url.origin !== blueSimUrl.origin || url.pathname !== blueSimUrl.pathname) return url.href
   if (appSitlVersion.bluesim !== NOT_VERSIONED) url.searchParams.set('v', appSitlVersion.bluesim)
   url.searchParams.set('channel', channel)
+  if (options.home) url.searchParams.set('home', `${options.home.lat},${options.home.lon}`)
+  if (options.ping360) url.searchParams.set('ping360', '1')
   return url.href
 }
