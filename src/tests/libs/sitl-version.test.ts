@@ -37,3 +37,14 @@ test("versionedSimulatorUrl passes the SITL home and the Ping360 option to Cockp
   // Other simulators do not get Cockpit's BlueSim settings
   expect(versionedSimulatorUrl('https://example.com/sim.html', 'tab-1', options)).toBe('https://example.com/sim.html')
 })
+
+test("versionedSimulatorUrl passes the Ping360 range to Cockpit's BlueSim only while the sonar is simulated", () => {
+  const ranged = new URL(versionedSimulatorUrl('bluesim/index.html', 'tab-1', { ping360: true, ping360Range: 12 }))
+  expect(ranged.searchParams.get('ping360_range')).toBe('12')
+  const unranged = new URL(versionedSimulatorUrl('bluesim/index.html', 'tab-1', { ping360: true }))
+  expect(unranged.searchParams.has('ping360_range')).toBe(false)
+  const disabled = new URL(versionedSimulatorUrl('bluesim/index.html', 'tab-1', { ping360: false, ping360Range: 12 }))
+  expect(disabled.searchParams.has('ping360_range')).toBe(false)
+  const external = versionedSimulatorUrl('https://example.com/sim.html', 'tab-1', { ping360: true, ping360Range: 12 })
+  expect(external).toBe('https://example.com/sim.html')
+})
