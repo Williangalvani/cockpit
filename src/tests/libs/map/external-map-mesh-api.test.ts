@@ -4,6 +4,7 @@ import {
   type ValidatedMapMeshQuads,
   externalMapMeshCommandSchema,
   externalMapMeshLimits,
+  isExternalMapMeshCommand,
 } from '@/libs/map/external-map-mesh-api'
 
 type Quads = Pick<ValidatedMapMeshQuads, 'corners' | 'uv' | 'texels'>
@@ -125,6 +126,45 @@ describe('cockpit:removeMapMeshQuads', () => {
     expect(remove(externalMapMeshLimits.maxCapacity)).toBe(true)
     expect(remove(externalMapMeshLimits.maxCapacity + 1)).toBe(false)
     expect(remove(0)).toBe(false)
+  })
+})
+
+describe('requestId', () => {
+  const { corners, uv, texels } = quads(1)
+  const meshCommands = [
+    {
+      type: 'cockpit:setMapMesh',
+      mesh: { id: 'test-mesh', name: 'Test', capacity: 1, texels: { format: 'r8', width: 1, height: 1 } },
+    },
+    { type: 'cockpit:setMapMeshQuads', id: 'test-mesh', corners, uv, texels },
+    { type: 'cockpit:removeMapMeshQuads', id: 'test-mesh', first: 0, count: 1 },
+    { type: 'cockpit:clearMapMesh', id: 'test-mesh' },
+    { type: 'cockpit:removeMapMesh', id: 'test-mesh' },
+    { type: 'cockpit:setMapMeshPalette', id: 'test-mesh', palette: new Uint8Array(1024) },
+  ]
+
+  it('is optional on every mesh command, and kept when sent', () => {
+    for (const command of meshCommands) {
+      expect(externalMapMeshCommandSchema.safeParse(command).success).toBe(true)
+      expect(externalMapMeshCommandSchema.parse({ ...command, requestId: 'r-1' })).toMatchObject({
+        requestId: 'r-1',
+      })
+    }
+  })
+
+  it('is a non-empty string of at most 256 characters', () => {
+    const [command] = meshCommands
+    for (const requestId of ['', 'x'.repeat(257), 7, null]) {
+      expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId }).success).toBe(false)
+    }
+    expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId: 'x'.repeat(256) }).success).toBe(true)
+  })
+
+  it('is required on cockpit:getMapCapabilities, which is recognised as a map command', () => {
+    const query = { type: 'cockpit:getMapCapabilities', requestId: 'r-1' }
+    expect(isExternalMapMeshCommand(query)).toBe(true)
+    expect(externalMapMeshCommandSchema.safeParse(query).success).toBe(true)
+    expect(externalMapMeshCommandSchema.safeParse({ type: query.type }).success).toBe(false)
   })
 })
 
