@@ -183,6 +183,7 @@ import SplashScreen from './components/SplashScreen.vue'
 import WidgetBar from './components/WidgetBar.vue'
 import { openMainMenuIfSafeOrDesired } from './composables/armSafetyDialog'
 import { useCustomTileProviderVehicleSync } from './composables/map/useCustomTileProviderVehicleSync'
+import { useExternalMapMeshes } from './composables/map/useExternalMapMeshes'
 import {
   closeMenuPage,
   goToBaseView,
@@ -261,6 +262,9 @@ useMcpBridge()
 
 // Created at boot so external software can manage points of interest before any map is mounted.
 usePointsOfInterest()
+
+// Created at boot so external software can send map meshes before any map is mounted.
+useExternalMapMeshes()
 
 // Created at boot so the vehicle's fence is re-read on every connection, before any map is mounted.
 useGeoFenceStore()
