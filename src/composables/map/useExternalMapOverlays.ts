@@ -4,13 +4,16 @@ import { type ComputedRef, computed, ref } from 'vue'
 
 import { openSnackbar } from '@/composables/snackbar'
 import { listenToGenericWebSocketJsonMessages } from '@/libs/generic-websocket'
-import { MapMeshStore } from '@/libs/map/external-map-meshes'
+import { type MapMeshWrittenSlots, MapMeshStore } from '@/libs/map/external-map-meshes'
 import { mapMeshStats, recordMapMeshMs, setMapMeshCpuByteSize } from '@/libs/map/external-map-meshes-stats'
 import {
+  type ExternalMapMeshResult,
   type ExternalMapOverlayCommand,
   type ExternalMapOverlayFeature,
+  type ExternalMapReply,
   type ValidatedMapGeoTiff,
   externalMapOverlayCommandSchema,
+  externalMapRequestIdSchema,
   isExternalMapOverlayCommand,
 } from '@/libs/map/external-overlay-api'
 import { deleteStoredOverlay, importGeoTiffFile, OverlayStorageQuotaError } from '@/libs/map/overlay-import'
@@ -76,9 +79,18 @@ export interface ExternalMapOverlaysState {
    */
   removeOverlay: (id: string) => void
   /**
-   * Applies a map overlay command from external software, ignoring any other message
+   * Applies a map overlay command from external software, ignoring any other message. Mesh commands carrying a
+   * `requestId` are answered through `reply`.
    */
-  handleExternalMapOverlayMessage: (message: unknown) => void
+  handleExternalMapOverlayMessage: (message: unknown, reply?: ExternalMapReply) => void
+}
+
+type MeshCommandOutcome = Omit<ExternalMapMeshResult, 'type' | 'requestId'>
+
+// The mesh a command names, read before validation, so even a malformed command can be reported against it.
+const sentMeshId = (message: Record<string, unknown>): string => {
+  const id = message.id ?? (message.mesh as Record<string, unknown> | null | undefined)?.id
+  return typeof id === 'string' ? id : ''
 }
 
 // Saved on this computer only: a survey mesh is too large to sync through the vehicle, and a sender reaches
@@ -204,7 +216,7 @@ const createState = (): ExternalMapOverlaysState => {
     return overlay
   }
 
-  const applyCommand = (command: ExternalMapOverlayCommand): void => {
+  const applyCommand = (command: ExternalMapOverlayCommand): MapMeshWrittenSlots | undefined => {
     switch (command.type) {
       case 'cockpit:setMapOverlay': {
         const { id, name, live, geojson } = command.overlay
@@ -251,9 +263,11 @@ const createState = (): ExternalMapOverlaysState => {
         if (overlays.has(command.mesh.id)) removeOverlay(command.mesh.id)
         meshes.set(command.mesh)
         return
-      case 'cockpit:setMapMeshQuads':
-        mapMeshStats.quadsWritten += meshes.writeQuads(command.id, command)
-        return
+      case 'cockpit:setMapMeshQuads': {
+        const written = meshes.writeQuads(command.id, command)
+        mapMeshStats.quadsWritten += written.count
+        return written
+      }
       case 'cockpit:removeMapMeshQuads':
         meshes.removeQuads(command.id, command.first, command.count)
         return
@@ -283,28 +297,65 @@ const createState = (): ExternalMapOverlaysState => {
     }
   }
 
-  const handleExternalMapOverlayMessage = (message: unknown): void => {
+  // A sender repeats its commands many times a second, so a rejected mesh is only worth one warning.
+  const warnedMeshIds = new Set<string>()
+  const rejectMeshCommand = (id: string, error: string, answer: (outcome: MeshCommandOutcome) => void): void => {
+    answer({ id, ok: false, error })
+    if (warnedMeshIds.has(id)) return
+    warnedMeshIds.add(id)
+    console.warn(`[ExternalMapOverlays] Ignoring command for mesh '${id}'. ${error}`)
+  }
+
+  const applyMeshCommand = (
+    command: ExternalMapOverlayCommand,
+    id: string,
+    answer: (outcome: MeshCommandOutcome) => void
+  ): void => {
+    const applyStart = performance.now()
+    let written: MapMeshWrittenSlots | undefined
+    try {
+      written = applyCommand(command)
+    } catch (error) {
+      rejectMeshCommand(id, messageFromError(error), answer)
+      return
+    }
+    mapMeshStats.messagesApplied++
+    recordMapMeshMs('apply', performance.now() - applyStart)
+    const mesh = meshes.meshes.get(id)
+    const slots = mesh ? { head: mesh.head % mesh.capacity, capacity: mesh.capacity } : {}
+    answer({ id, ok: true, ...written, ...slots })
+  }
+
+  const handleExternalMapOverlayMessage = (message: unknown, reply?: ExternalMapReply): void => {
     if (!isExternalMapOverlayCommand(message)) return
+    const sent = message as Record<string, unknown>
+    const isMeshCommand = String(sent.type).includes('MapMesh')
+    const requestId = externalMapRequestIdSchema.safeParse(sent.requestId).data
+    const answer = (outcome: MeshCommandOutcome): void => {
+      if (requestId !== undefined) reply?.({ type: 'cockpit:mapMeshResult', requestId, ...outcome })
+    }
     const parseStart = performance.now()
     const parsed = externalMapOverlayCommandSchema.safeParse(message)
-    const isMeshCommand = parsed.data?.type.includes('MapMesh') ?? false
-    if (isMeshCommand) recordMapMeshMs('parse', performance.now() - parseStart)
+    if (parsed.success && isMeshCommand) recordMapMeshMs('parse', performance.now() - parseStart)
     if (!parsed.success) {
       // A malformed mesh can fail on every position, so only the first problem is worth reading.
       const [issue] = parsed.error.issues
       const others = parsed.error.issues.length - 1
       const more = others > 0 ? ` (and ${others} more)` : ''
-      console.warn(`[ExternalMapOverlays] Ignoring invalid command. ${issue.path.join('.')}: ${issue.message}${more}`)
+      const problem = `${issue.path.join('.')}: ${issue.message}${more}`
+      if (!isMeshCommand) {
+        console.warn(`[ExternalMapOverlays] Ignoring invalid command. ${problem}`)
+        return
+      }
+      // Queued like a valid command, so answers arrive in the order their commands were sent.
+      storedOverlaysLoaded.then(() => rejectMeshCommand(sentMeshId(sent), `Invalid command. ${problem}`, answer))
       return
     }
     // Applied once the saved overlays are read, so finishing that read never undoes a newer command.
     storedOverlaysLoaded
       .then(() => {
-        const applyStart = performance.now()
-        applyCommand(parsed.data)
-        if (!isMeshCommand) return
-        mapMeshStats.messagesApplied++
-        recordMapMeshMs('apply', performance.now() - applyStart)
+        if (isMeshCommand) applyMeshCommand(parsed.data, sentMeshId(sent), answer)
+        else applyCommand(parsed.data)
       })
       .catch((error) => console.warn(`[ExternalMapOverlays] Ignoring command. ${messageFromError(error)}`))
   }
