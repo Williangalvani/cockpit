@@ -149,6 +149,10 @@ export interface SimulatorUrlOptions {
    * Whether BlueSim simulates a Ping360 sonar
    */
   ping360?: boolean
+  /**
+   * Range of the simulated Ping360, in meters, only passed when it is simulated
+   */
+  ping360Range?: number
 }
 
 /**
@@ -167,5 +171,8 @@ export const versionedSimulatorUrl = (source: string, channel: string, options: 
   url.searchParams.set('channel', channel)
   if (options.home) url.searchParams.set('home', `${options.home.lat},${options.home.lon}`)
   if (options.ping360) url.searchParams.set('ping360', '1')
+  if (options.ping360 && options.ping360Range !== undefined) {
+    url.searchParams.set('ping360_range', String(options.ping360Range))
+  }
   return url.href
 }
