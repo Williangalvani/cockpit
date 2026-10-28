@@ -1,6 +1,12 @@
 <template>
   <div class="relative w-full h-full">
-    <iframe :src="source" class="w-full h-full" :class="{ 'pointer-events-none': !isInteractive }" frameborder="0" />
+    <iframe
+      ref="simulatorFrame"
+      :src="source"
+      class="w-full h-full"
+      :class="{ 'pointer-events-none': !isInteractive }"
+      frameborder="0"
+    />
     <div
       v-if="sitlStageMessage"
       class="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-sm text-white text-center pointer-events-none"
@@ -31,6 +37,15 @@
             :color="widget.options.interactive ? 'white' : undefined"
             hide-details
           />
+          <v-switch
+            v-model="widget.options.ping360"
+            class="my-1"
+            label="Simulate a Ping360 sonar (drawn on the map)"
+            :color="widget.options.ping360 ? 'white' : undefined"
+            hint="Toggling it reloads the simulator."
+            persistent-hint
+            @update:model-value="logPing360Toggle"
+          />
         </v-card-text>
         <v-card-actions class="flex justify-end">
           <v-btn color="white" @click="widgetStore.widgetManagerVars(widget.hash).configMenuOpen = false">
@@ -45,7 +60,9 @@
 <script setup lang="ts">
 import { computed, onBeforeMount, onBeforeUnmount, ref, toRefs } from 'vue'
 
-import { type SitlStage, onSitlStageChange, sitlPhysicsChannelId } from '@/libs/connection/sitl-connection'
+import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
+import { usePointsOfInterest } from '@/composables/usePointsOfInterest'
+import { type SitlStage, getSitlHome, onSitlStageChange, sitlPhysicsChannelId } from '@/libs/connection/sitl-connection'
 import { versionedSimulatorUrl } from '@/libs/sitl-version'
 import { useAppInterfaceStore } from '@/stores/appInterface'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
@@ -67,11 +84,34 @@ onBeforeMount(() => {
     source: 'bluesim/index.html?level=reef',
     // Like a video, the simulator stays out of the way of Cockpit's own controls unless asked otherwise
     interactive: false,
+    ping360: false,
   }
   widget.value.options = { ...defaultOptions, ...widget.value.options }
+  window.addEventListener('message', forwardSimulatorMessage)
 })
+onBeforeUnmount(() => window.removeEventListener('message', forwardSimulatorMessage))
 
-const source = computed(() => versionedSimulatorUrl(widget.value.options.source, sitlPhysicsChannelId))
+const simulatorFrame = ref<HTMLIFrameElement>()
+const { handleExternalPoiMessage } = usePointsOfInterest()
+const { handleExternalMapMeshMessage } = useExternalMapMeshes()
+
+const forwardSimulatorMessage = (event: MessageEvent): void => {
+  // Every simulator widget hears every message, so only the one embedding the sender applies a command
+  if (event.source !== simulatorFrame.value?.contentWindow) return
+  handleExternalPoiMessage(event.data)
+  handleExternalMapMeshMessage(event.data)
+}
+
+const logPing360Toggle = (enabled: boolean | null): void => {
+  logUserAction(`${enabled ? 'Enabled' : 'Disabled'} the simulated Ping360 sonar`)
+}
+
+const source = computed(() =>
+  versionedSimulatorUrl(widget.value.options.source, sitlPhysicsChannelId, {
+    home: getSitlHome(),
+    ping360: widget.value.options.ping360,
+  })
+)
 const isInteractive = computed(() => widget.value.options.interactive && !widgetStore.editingMode)
 
 const sitlStageMessages: Partial<Record<SitlStage, string>> = {

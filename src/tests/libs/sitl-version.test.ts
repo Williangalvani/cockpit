@@ -21,5 +21,19 @@ test('versionedSimulatorUrl', () => {
   expect(versioned.searchParams.get('level')).toBe('reef')
   expect(versioned.searchParams.get('v')).toBe(appSitlVersion.bluesim === 'none' ? null : appSitlVersion.bluesim)
   expect(versioned.searchParams.get('channel')).toBe('tab-1')
+  expect(versioned.searchParams.has('home')).toBe(false)
+  expect(versioned.searchParams.has('ping360')).toBe(false)
   expect(versionedSimulatorUrl('https://example.com/sim.html?a=1', 'tab-1')).toBe('https://example.com/sim.html?a=1')
+})
+
+test("versionedSimulatorUrl passes the SITL home and the Ping360 option to Cockpit's BlueSim", () => {
+  const options = { home: { lat: 33.810313, lon: -118.393867 }, ping360: true }
+  const withOptions = new URL(versionedSimulatorUrl('bluesim/index.html?level=reef', 'tab-1', options))
+  expect(withOptions.searchParams.get('home')).toBe('33.810313,-118.393867')
+  expect(withOptions.searchParams.get('ping360')).toBe('1')
+  const withoutOptions = new URL(versionedSimulatorUrl('bluesim/index.html', 'tab-1', { home: null, ping360: false }))
+  expect(withoutOptions.searchParams.has('home')).toBe(false)
+  expect(withoutOptions.searchParams.has('ping360')).toBe(false)
+  // Other simulators do not get Cockpit's BlueSim settings
+  expect(versionedSimulatorUrl('https://example.com/sim.html', 'tab-1', options)).toBe('https://example.com/sim.html')
 })
