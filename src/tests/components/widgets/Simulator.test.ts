@@ -18,6 +18,7 @@ vi.mock('vuetify/lib/components/VBtn/index.mjs', () => ({ VBtn: empty }))
 vi.mock('@/composables/usePointsOfInterest', () => ({
   usePointsOfInterest: () => ({ handleExternalPoiMessage: vi.fn() }),
 }))
+vi.mock('@/composables/snackbar', () => ({ openSnackbar: vi.fn() }))
 vi.mock('@/libs/connection/sitl-connection', () => ({
   getSitlHome: () => null,
   onSitlStageChange: () => () => undefined,
