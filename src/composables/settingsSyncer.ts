@@ -90,6 +90,10 @@ export function useBlueOsStorage<T>(
       const hasTheSameSerialization = prettyFormat(newValue) === prettyFormat(oldRefedValue)
 
       if (isTheSameObject || hasTheSameSerialization) {
+        // Back at the last written value: the write still pending for the intermediate one would persist it
+        clearTimeout(watchUpdaterTimeout)
+        watchUpdaterTimeout = undefined
+        firstPendingChangeEpoch = undefined
         return
       }
 
