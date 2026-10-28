@@ -77,6 +77,10 @@ export interface ExternalMapOverlaysState {
    */
   meshes: MapMeshStore
   /**
+   * How many map meshes exist
+   */
+  meshCount: ComputedRef<number>
+  /**
    * Removes an overlay, and its saved copy if it has one
    */
   removeOverlay: (id: string) => void
@@ -119,6 +123,9 @@ const createState = (): ExternalMapOverlaysState => {
   const changeCount = ref(0)
   const meshes = new MapMeshStore()
   setMapMeshCpuByteSize(() => meshes.byteSize())
+  // Runs on every quad write, but only a changed count reaches the components reading it.
+  const meshCount = ref(0)
+  meshes.subscribe(() => (meshCount.value = meshes.meshes.size))
   const persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   // Coalesced, so a sender updating a saved overlay many times a second does not serialize it on every message.
@@ -377,6 +384,7 @@ const createState = (): ExternalMapOverlaysState => {
       return [...overlays.values()]
     }),
     meshes,
+    meshCount: computed(() => meshCount.value),
     removeOverlay,
     handleExternalMapOverlayMessage,
   }
