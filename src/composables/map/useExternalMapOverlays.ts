@@ -4,6 +4,7 @@ import { type ComputedRef, computed, ref } from 'vue'
 
 import { openSnackbar } from '@/composables/snackbar'
 import { listenToGenericWebSocketJsonMessages } from '@/libs/generic-websocket'
+import { MapMeshStore } from '@/libs/map/external-map-meshes'
 import {
   type ExternalMapOverlayCommand,
   type ExternalMapOverlayFeature,
@@ -66,6 +67,10 @@ export interface ExternalMapOverlaysState {
    */
   overlays: ComputedRef<ReceivedMapOverlay[]>
   /**
+   * Every received map mesh, kept in memory only
+   */
+  meshes: MapMeshStore
+  /**
    * Removes an overlay, and its saved copy if it has one
    */
   removeOverlay: (id: string) => void
@@ -97,6 +102,7 @@ const createState = (): ExternalMapOverlaysState => {
   const overlays = new Map<string, ReceivedMapOverlay>()
   // The overlays are plain objects, so a large mesh is not made deeply reactive; this counter is what changes.
   const changeCount = ref(0)
+  const meshes = new MapMeshStore()
   const persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   // Coalesced, so a sender updating a saved overlay many times a second does not serialize it on every message.
@@ -200,6 +206,7 @@ const createState = (): ExternalMapOverlaysState => {
     switch (command.type) {
       case 'cockpit:setMapOverlay': {
         const { id, name, live, geojson } = command.overlay
+        if (meshes.has(id)) meshes.remove(id)
         const previous = overlays.get(id)
         overlays.set(id, { id, name, live, features: geojson.features, revision: (previous?.revision ?? 0) + 1 })
         changeCount.value++
@@ -238,9 +245,32 @@ const createState = (): ExternalMapOverlaysState => {
         )
         return
       }
+      case 'cockpit:setMapMesh':
+        if (overlays.has(command.mesh.id)) removeOverlay(command.mesh.id)
+        meshes.set(command.mesh)
+        return
+      case 'cockpit:setMapMeshQuads':
+        meshes.writeQuads(command.id, command)
+        return
+      case 'cockpit:removeMapMeshQuads':
+        meshes.removeQuads(command.id, command.first, command.count)
+        return
+      case 'cockpit:clearMapMesh':
+        meshes.clear(command.id)
+        return
+      case 'cockpit:removeMapMesh':
+        meshes.remove(command.id)
+        return
+      case 'cockpit:setMapMeshPalette':
+        meshes.setPalette(command.id, command.palette)
+        return
       case 'cockpit:removeMapOverlay':
         if (overlays.has(command.id)) {
           removeOverlay(command.id)
+          return
+        }
+        if (meshes.has(command.id)) {
+          meshes.remove(command.id)
           return
         }
         // Queued behind any download of the same overlay, so a removal is never overtaken by it.
@@ -276,6 +306,7 @@ const createState = (): ExternalMapOverlaysState => {
       void changeCount.value
       return [...overlays.values()]
     }),
+    meshes,
     removeOverlay,
     handleExternalMapOverlayMessage,
   }
