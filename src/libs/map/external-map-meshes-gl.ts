@@ -66,6 +66,7 @@ uniform sampler2D palette;
 uniform bool paletted;
 uniform vec2 stripSize;
 uniform vec2 pageSize;
+uniform float mapAlpha;
 in vec2 uv;
 flat in vec2 stripOrigin;
 flat in vec4 quadTint;
@@ -76,10 +77,19 @@ void main() {
   vec4 texel = texture(texels, (stripOrigin + inStrip) / pageSize);
   vec4 straight = paletted ? texture(palette, vec2((texel.r * 255.0 + 0.5) / 256.0, 0.5)) : texel;
   straight *= quadTint;
-  color = vec4(straight.rgb * straight.a, straight.a);
+  color = vec4(straight.rgb * straight.a, straight.a) * mapAlpha;
 }`
 
-const uniformNames = ['offset', 'scale', 'firstSlot', 'stripsPerRow', 'stripSize', 'pageSize', 'paletted'] as const
+const uniformNames = [
+  'offset',
+  'scale',
+  'firstSlot',
+  'stripsPerRow',
+  'stripSize',
+  'pageSize',
+  'paletted',
+  'mapAlpha',
+] as const
 
 // Location, components, type, normalized and byte offset of each per-instance attribute.
 const instanceAttributes: [number, number, 'FLOAT' | 'UNSIGNED_BYTE', boolean, number][] = [
@@ -190,9 +200,10 @@ export class MapMeshGlRenderer implements MapMeshRenderer {
    * valid until the current task ends.
    * @param {MapMesh} mesh - The mesh
    * @param {MapMeshView} view - Area of the map
+   * @param {number} mapAlpha - Multiplier, from 0 to 1, of the alpha that map draws its meshes with
    * @returns {boolean} Whether anything was drawn
    */
-  render(mesh: MapMesh, view: MapMeshView): boolean {
+  render(mesh: MapMesh, view: MapMeshView, mapAlpha: number): boolean {
     const { gl, canvas } = this
     if (gl.isContextLost()) return false
     this.store.flush(this)
@@ -219,6 +230,7 @@ export class MapMeshGlRenderer implements MapMeshRenderer {
     gl.uniform1i(uniforms.stripsPerRow, mesh.stripsPerRow)
     gl.uniform2f(uniforms.stripSize, mesh.stripWidth, mesh.stripHeight)
     gl.uniform1i(uniforms.paletted, mesh.format === 'r8' ? 1 : 0)
+    gl.uniform1f(uniforms.mapAlpha, mapAlpha)
     gl.activeTexture(gl.TEXTURE1)
     gl.bindTexture(gl.TEXTURE_2D, gpu.palette)
     gl.activeTexture(gl.TEXTURE0)

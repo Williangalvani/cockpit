@@ -50,7 +50,8 @@ const intersects = (a: MercatorBounds, b: MercatorBounds): boolean =>
 /**
  * Leaflet layer drawing the map meshes of a {@link MapMeshStore} on one canvas, padded past the view. Every draw
  * is a full redraw, made when the meshes change in view (once per frame), when a pan leaves the padding, when the
- * zoom or size changes, and when the map becomes shown. Zooms scale the last drawing until they end.
+ * zoom or size changes, when the map's mesh alpha changes, and when the map becomes shown. Zooms scale the last
+ * drawing until they end.
  */
 export class ExternalMapMeshesLayer extends L.Layer {
   private canvas?: HTMLCanvasElement
@@ -65,6 +66,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
   private drawnOrigin?: L.LatLng
   private drawnZoom = 0
   private drawnBounds?: MercatorBounds
+  private mapAlpha = 1
   private readonly statsId = `map-${++layerCount}`
   private readonly stats: MapMeshMapStats = {
     shown: false,
@@ -72,6 +74,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
     redrawMsSum: 0,
     redrawMsMax: 0,
     redrawMsLast: 0,
+    mapAlpha: 1,
   }
 
   /**
@@ -129,6 +132,18 @@ export class ExternalMapMeshesLayer extends L.Layer {
       // A zoom in progress scales the last drawing instead, and its end draws again.
       if (!this.zooming && this.shown) this.draw()
     })
+  }
+
+  /**
+   * Scales the alpha of every mesh this map draws, on top of each mesh's own opacity, redrawing on the next frame
+   * @param {number} alpha - From 0, which draws no meshes, to 1; anything else is clamped, and not a number is 1
+   */
+  setMapAlpha(alpha: number): void {
+    const clamped = Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1
+    if (clamped === this.mapAlpha) return
+    this.mapAlpha = clamped
+    this.stats.mapAlpha = clamped
+    this.redraw()
   }
 
   /* eslint-disable jsdoc/require-jsdoc -- private helpers, commented where they need it. */
@@ -223,7 +238,10 @@ export class ExternalMapMeshesLayer extends L.Layer {
       maxY: originY,
     }
 
-    const meshes = [...this.config.store.meshes.values()].filter((mesh) => mesh.highWater > 0 && mesh.opacity > 0)
+    const meshes =
+      this.mapAlpha > 0
+        ? [...this.config.store.meshes.values()].filter((mesh) => mesh.highWater > 0 && mesh.opacity > 0)
+        : []
     const renderer = meshes.length > 0 ? this.config.renderer() : undefined
     if (!renderer) {
       meshes.forEach((mesh) => this.config.onUnsupported(mesh))
@@ -243,7 +261,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
     context.clearRect(0, 0, width, height)
     const view = { width, height, originX, originY, metresPerPixel: metresPerCssPixel / pixelRatio }
     for (const mesh of meshes) {
-      if (!renderer.render(mesh, view)) continue
+      if (!renderer.render(mesh, view, this.mapAlpha)) continue
       context.globalAlpha = mesh.opacity
       const source = renderer.canvas
       context.drawImage(source, 0, source.height - height, width, height, 0, 0, width, height)

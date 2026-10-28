@@ -26,6 +26,10 @@ export interface UseExternalMapMeshLayersReturn {
    */
   init: (map: LeafletMap, isShown?: () => boolean) => void
   /**
+   * Scales the alpha of every mesh drawn on this map, from 0 (none drawn) to 1, before or after `init`.
+   */
+  setMeshOpacity: (opacity: number) => void
+  /**
    * Removes the meshes from the map.
    */
   destroy: () => void
@@ -40,6 +44,7 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
   const { meshes } = useExternalMapMeshes()
 
   let meshLayer: ExternalMapMeshesLayer | undefined
+  let meshOpacity = 1
   let mapRef: LeafletMap | undefined
 
   const init = (map: LeafletMap, isShown = (): boolean => true): void => {
@@ -53,7 +58,13 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
       onUnsupported: reportUndrawableMesh,
       pane: MESH_PANE,
     })
+    meshLayer.setMapAlpha(meshOpacity)
     map.addLayer(meshLayer)
+  }
+
+  const setMeshOpacity = (opacity: number): void => {
+    meshOpacity = opacity
+    meshLayer?.setMapAlpha(opacity)
   }
 
   const destroy = (): void => {
@@ -62,5 +73,5 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
     mapRef = undefined
   }
 
-  return { init, destroy }
+  return { init, setMeshOpacity, destroy }
 }
