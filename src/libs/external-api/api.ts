@@ -1,3 +1,4 @@
+import type { ExternalMapMesh, ExternalMapMeshQuads } from '@/libs/map/external-map-mesh-api'
 import type { ExternalMapGeoTiff, ExternalMapOverlay } from '@/libs/map/external-overlay-api'
 import type { ExternalPoi, ExternalPoiUpdate } from '@/libs/poi/external-api'
 
@@ -147,4 +148,139 @@ export function setMapGeoTiff(geoTiff: ExternalMapGeoTiff): void {
  */
 export function removeMapOverlay(id: string): void {
   window.parent.postMessage({ type: 'cockpit:removeMapOverlay', id }, '*')
+}
+
+/**
+ * Asks Cockpit which map mesh features and limits it supports. It answers with a `cockpit:mapCapabilities` message
+ * carrying the same `requestId` and a `meshes` object: `version` of the mesh commands (check that it is the version
+ * your code targets; unknown fields may appear in either direction and are ignored), `drawn` (false without WebGL2:
+ * meshes are still kept and their commands answered, but nothing is shown), the limits `maxCapacity`,
+ * `maxQuadsPerMessage`, `maxMessageBytes`, `maxTexelSide` and `maxStripBytes` (the most texel bytes one untinted strip
+ * can have; subtract 4 when sending a tint, and keep a batch within `maxMessageBytes`), and the texel `formats`. If
+ * Cockpit never answers, it predates map meshes. Answers to this and to mesh commands arrive as `message` events on
+ * this window, in the order their commands were sent. A `requestId` has 1 to 256 characters: a query or command with
+ * any other is invalid, so it is neither applied nor answered.
+ *
+ * The mesh helpers work only from the page an IFrame widget loads: Cockpit applies and answers a mesh command only
+ * when its `event.source` is that widget's own iframe. A DIY widget runs in Cockpit's own window, so what it posts is
+ * dropped silently, with no warning and no answer, as if Cockpit predated map meshes. Load your page in an IFrame
+ * widget, or send the same commands from a generic WebSocket server.
+ * @param {string} requestId - Echoed back in the answer
+ */
+export function getMapCapabilities(requestId: string): void {
+  window.parent.postMessage({ type: 'cockpit:getMapCapabilities', requestId }, '*')
+}
+
+/**
+ * Creates a mesh of textured quads on Cockpit's maps, for georeferenced imagery sent many times a second. Sending it
+ * again with the same capacity and texels keeps its quads and its head, changing only its name, filter, palette and
+ * opacity; the optional ones you omit return to their defaults (`'nearest'` filter, gray ramp palette, opacity 1).
+ * Any other layout empties it. Meshes are drawn only where WebGL2 is available.
+ *
+ * Meshes are kept in memory only, so a Cockpit that reloads starts without them, while one whose connection to you
+ * dropped keeps them as they were, without what you sent in between. Every sender shares them, so none is removed when
+ * a connection closes. On every connection call `getMapCapabilities`, then `setMapMesh`. To replace what it shows, call
+ * `clearMapMesh` once that set succeeds (regardless of your slot numbering), then replay the quads you want shown,
+ * oldest first, in messages of at most 4096 quads, with an explicit `first` so every Cockpit ends up with the same
+ * quads in the same slots. To resume instead, send every write and removal it missed. Write quads only once the set
+ * is answered `ok`: a write to a mesh that does not exist, because its set was refused or Cockpit reloaded since, is
+ * answered with `Mesh '<id>' does not exist.`
+ * @param {ExternalMapMesh} mesh - Id, name, capacity in quads, and the format and size of every quad's strip of texels.
+ * An r8 mesh's texels index into its palette, 256 straight-alpha RGBA entries, an opaque gray ramp unless given. The
+ * palette decides what shows through: give the entries for faint or empty readings zero alpha. Every sender shares the
+ * same ids, so prefix the id with your extension's name.
+ * `filter: 'linear'` interpolates r8 indices before the palette lookup, so use it only with a continuous ramp.
+ * @param {string} [requestId] - When given, Cockpit answers with a `cockpit:mapMeshResult` carrying it and either `ok`
+ * with the mesh's `capacity` and `head`, or the `error` it was rejected for
+ * @example
+ * ```typescript
+ * setMapMesh({ id: 'my-extension-scan', name: 'Scan', capacity: 4096, texels: { format: 'r8', width: 200, height: 1 } })
+ * ```
+ */
+export function setMapMesh(mesh: ExternalMapMesh, requestId?: string): void {
+  window.parent.postMessage({ type: 'cockpit:setMapMesh', requestId, mesh }, '*')
+}
+
+/**
+ * Writes quads into a map mesh, replacing those in their slots. A quad is drawn as two triangles split along its corner
+ * 1 to corner 3 diagonal, its uv interpolated linearly across each. Its color is its texel's straight (not
+ * premultiplied) RGBA, or for r8 its palette entry's, times its tint. Quads are drawn in slot order from the head on:
+ * where a quad is the first to cover a pixel its color is drawn as it is, and each later quad mixes into what is there
+ * with 60% weight for the newer one, on premultiplied color and alpha. As a result, identical overlapping readings draw
+ * as one, while a changed reading (fully transparent texels included) pulls the pixel toward it, and a few later
+ * readings all but replace it. With `filter: 'linear'`, r8 indices are interpolated before the palette lookup, so an
+ * edge between index 0 and data samples the entries in between, and rgba8 straight colors are interpolated before
+ * premultiplying, so a transparent texel's color bleeds into its neighbor's edge: give transparent texels their
+ * neighbors' color, or use `'nearest'`, to avoid a dark fringe. The mesh's opacity fades the result once. The typed
+ * arrays' whole buffers are transferred to Cockpit, even where an array views only part of one, so they are empty here
+ * afterwards (`byteLength` 0): build new arrays to send the same quads again.
+ * @param {string} id - The id of the mesh
+ * @param {ExternalMapMeshQuads} quads - Per quad: `corners`, 4 (longitude, latitude) pairs in ring order, longitude
+ * first unlike Leaflet's (lat, lng); `uv`, the 4 corners' (u, v) in texels of the quad's strip, not 0 to 1 (texel
+ * centers at +0.5, with v counting rows from the first row sent), so corners NW, NE, SE, SW with uv (0, 0),
+ * (width, 0), (width, height), (0, height) show the strip upright, its first row along the north edge, while uv of 0
+ * to 1 draws one texel's flat color; `texels`, its strip row by row, as a Uint8Array or a Uint8ClampedArray such as
+ * a canvas's `getImageData(...).data`; and an optional RGBA `tint`. Without `first`, they follow the previous write,
+ * wrapping around at the mesh's capacity
+ * @param {string} [requestId] - When given, Cockpit answers with a `cockpit:mapMeshResult` carrying it, the
+ * `first` slot and `count` written and the `head` the next write without `first` starts at, so you know which
+ * slots to remove later
+ * @example
+ * ```typescript
+ * // Text drawn on a canvas, shown upright on one 400 m by 100 m quad.
+ * const [width, height] = [512, 128]
+ * const canvas = Object.assign(document.createElement('canvas'), { width, height })
+ * const context = canvas.getContext('2d')!
+ * context.fillStyle = '#0b3d91'
+ * context.fillRect(0, 0, width, height)
+ * Object.assign(context, { fillStyle: '#fff', font: 'bold 72px sans-serif', textAlign: 'center' })
+ * context.textBaseline = 'middle'
+ * context.fillText('cockpit rules', width / 2, height / 2)
+ * window.addEventListener('message', ({ data }) => {
+ *   if (data.type !== 'cockpit:mapMeshResult' || data.requestId !== 'label-set' || !data.ok) return
+ *   const [west, east, north, south] = [-48.5606, -48.5565, -27.5931, -27.5939]
+ *   setMapMeshQuads('my-extension-label', {
+ *     first: 0,
+ *     corners: new Float64Array([west, north, east, north, east, south, west, south]),
+ *     uv: new Float32Array([0, 0, width, 0, width, height, 0, height]),
+ *     texels: context.getImageData(0, 0, width, height).data,
+ *   })
+ * })
+ * const texels = { format: 'rgba8', width, height } as const
+ * setMapMesh({ id: 'my-extension-label', name: 'Label', capacity: 1, texels }, 'label-set')
+ * ```
+ */
+export function setMapMeshQuads(id: string, quads: ExternalMapMeshQuads, requestId?: string): void {
+  const buffers = Object.values(quads).flatMap((value) => (ArrayBuffer.isView(value) ? [value.buffer] : []))
+  const transfer = [...new Set(buffers)].filter((buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer)
+  window.parent.postMessage({ type: 'cockpit:setMapMeshQuads', requestId, id, ...quads }, '*', transfer)
+}
+
+/**
+ * Empties consecutive slots of a map mesh, which then draw nothing.
+ * @param {string} id - The id of the mesh
+ * @param {number} first - The first slot
+ * @param {number} count - How many slots
+ * @param {string} [requestId] - When given, Cockpit answers with a `cockpit:mapMeshResult` carrying it
+ */
+export function removeMapMeshQuads(id: string, first: number, count: number, requestId?: string): void {
+  window.parent.postMessage({ type: 'cockpit:removeMapMeshQuads', requestId, id, first, count }, '*')
+}
+
+/**
+ * Empties every slot of a map mesh, keeping the mesh to be written to again from slot 0.
+ * @param {string} id - The id of the mesh
+ * @param {string} [requestId] - When given, Cockpit answers with a `cockpit:mapMeshResult` carrying it
+ */
+export function clearMapMesh(id: string, requestId?: string): void {
+  window.parent.postMessage({ type: 'cockpit:clearMapMesh', requestId, id }, '*')
+}
+
+/**
+ * Removes a map mesh from Cockpit.
+ * @param {string} id - The id of the mesh
+ * @param {string} [requestId] - When given, Cockpit answers with a `cockpit:mapMeshResult` carrying it
+ */
+export function removeMapMesh(id: string, requestId?: string): void {
+  window.parent.postMessage({ type: 'cockpit:removeMapMesh', requestId, id }, '*')
 }
