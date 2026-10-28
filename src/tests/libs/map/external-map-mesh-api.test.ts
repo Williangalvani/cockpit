@@ -4,6 +4,7 @@ import {
   type ValidatedMapMeshQuads,
   externalMapMeshCommandSchema,
   externalMapMeshLimits,
+  isExternalMapMeshCommand,
 } from '@/libs/map/external-map-mesh-api'
 
 type Quads = Pick<ValidatedMapMeshQuads, 'corners' | 'uv' | 'texels'>
@@ -157,6 +158,13 @@ describe('requestId', () => {
       expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId }).success).toBe(false)
     }
     expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId: 'x'.repeat(256) }).success).toBe(true)
+  })
+
+  it('is required on cockpit:getMapCapabilities, which is recognised as a map command', () => {
+    const query = { type: 'cockpit:getMapCapabilities', requestId: 'r-1' }
+    expect(isExternalMapMeshCommand(query)).toBe(true)
+    expect(externalMapMeshCommandSchema.safeParse(query).success).toBe(true)
+    expect(externalMapMeshCommandSchema.safeParse({ type: query.type }).success).toBe(false)
   })
 })
 

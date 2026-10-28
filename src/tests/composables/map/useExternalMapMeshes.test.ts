@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
-import type { ExternalMapMeshResult } from '@/libs/map/external-map-mesh-api'
+import type { ExternalMapCapabilities, ExternalMapMeshResult } from '@/libs/map/external-map-mesh-api'
 
 vi.mock('@/libs/generic-websocket', () => ({ listenToGenericWebSocketJsonMessages: vi.fn() }))
+let hasWebGl2 = true
+vi.mock('@/libs/map/external-map-meshes-gl', () => ({ mapMeshGlRenderer: () => (hasWebGl2 ? {} : undefined) }))
 
 const { handleExternalMapMeshMessage, meshes } = useExternalMapMeshes()
 
@@ -25,13 +27,51 @@ const mesh = (id: string, capacity = 4): Record<string, unknown> => ({
 })
 
 const send = (...messages: Record<string, unknown>[]): ExternalMapMeshResult[] => {
-  const answers: ExternalMapMeshResult[] = []
+  const answers: (ExternalMapMeshResult | ExternalMapCapabilities)[] = []
   messages.forEach((message) => handleExternalMapMeshMessage(message, (answer) => answers.push(answer)))
-  return answers
+  return answers as ExternalMapMeshResult[]
 }
 
 afterEach(() => {
   vi.restoreAllMocks()
+  hasWebGl2 = true
+})
+
+describe('cockpit:getMapCapabilities', () => {
+  test('tells the mesh version, limits and formats, and whether meshes are drawn', () => {
+    const [capabilities] = send({ type: 'cockpit:getMapCapabilities', requestId: 'caps' }) as unknown[]
+    expect(capabilities).toEqual({
+      type: 'cockpit:mapCapabilities',
+      requestId: 'caps',
+      meshes: {
+        version: 1,
+        drawn: true,
+        maxCapacity: 1 << 20,
+        maxQuadsPerMessage: 4096,
+        maxMessageBytes: 2 * 1024 * 1024,
+        maxTexelSide: 2048,
+        formats: ['r8', 'rgba8'],
+      },
+    })
+  })
+
+  test('says meshes are not drawn without WebGL2, while mesh commands are still applied', () => {
+    hasWebGl2 = false
+    const answers = send(
+      { type: 'cockpit:getMapCapabilities', requestId: 'caps' },
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: mesh('capabilities-undrawn') },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'write', id: 'capabilities-undrawn', ...quads(2) }
+    )
+    expect((answers[0] as unknown as ExternalMapCapabilities).meshes.drawn).toBe(false)
+    expect(answers[1]).toMatchObject({ ok: true })
+    expect(answers[2]).toMatchObject({ ok: true, first: 0, count: 2, head: 2 })
+  })
+
+  test('needs a requestId, since its only purpose is the answer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    expect(send({ type: 'cockpit:getMapCapabilities' })).toEqual([])
+    expect(warn).toHaveBeenCalledOnce()
+  })
 })
 
 describe('mesh command answers', () => {

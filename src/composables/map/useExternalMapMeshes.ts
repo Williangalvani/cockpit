@@ -3,11 +3,13 @@ import {
   type ExternalMapMeshCommand,
   type ExternalMapMeshResult,
   type ExternalMapReply,
+  externalMapCapabilities,
   externalMapMeshCommandSchema,
   externalMapRequestIdSchema,
   isExternalMapMeshCommand,
 } from '@/libs/map/external-map-mesh-api'
 import { type MapMeshWrittenSlots, MapMeshStore } from '@/libs/map/external-map-meshes'
+import { mapMeshGlRenderer } from '@/libs/map/external-map-meshes-gl'
 import { mapMeshStats, recordMapMeshMs, setMapMeshCpuByteSize } from '@/libs/map/external-map-meshes-stats'
 import { messageFromError } from '@/libs/utils'
 
@@ -20,8 +22,8 @@ export interface ExternalMapMeshesState {
    */
   meshes: MapMeshStore
   /**
-   * Applies a map mesh command from external software, ignoring any other message. Commands carrying a
-   * `requestId` are answered through `reply`.
+   * Applies a map mesh command from external software, ignoring any other message. Mesh commands carrying a
+   * `requestId`, and capability queries, are answered through `reply`.
    */
   handleExternalMapMeshMessage: (message: unknown, reply?: ExternalMapReply) => void
 }
@@ -96,23 +98,34 @@ const createState = (): ExternalMapMeshesState => {
   const handleExternalMapMeshMessage = (message: unknown, reply?: ExternalMapReply): void => {
     if (!isExternalMapMeshCommand(message)) return
     const sent = message as Record<string, unknown>
+    const isMeshCommand = String(sent.type).includes('MapMesh')
     const requestId = externalMapRequestIdSchema.safeParse(sent.requestId).data
     const answer = (outcome: MeshCommandOutcome): void => {
       if (requestId !== undefined) reply?.({ type: 'cockpit:mapMeshResult', requestId, ...outcome })
     }
     const parseStart = performance.now()
     const parsed = externalMapMeshCommandSchema.safeParse(message)
-    if (parsed.success) recordMapMeshMs('parse', performance.now() - parseStart)
+    if (parsed.success && isMeshCommand) recordMapMeshMs('parse', performance.now() - parseStart)
     if (!parsed.success) {
       // A malformed mesh can fail on every position, so only the first problem is worth reading.
       const [issue] = parsed.error.issues
       const others = parsed.error.issues.length - 1
       const more = others > 0 ? ` (and ${others} more)` : ''
       const problem = `${issue.path.join('.')}: ${issue.message}${more}`
+      if (!isMeshCommand) {
+        console.warn(`[ExternalMapMeshes] Ignoring invalid command. ${problem}`)
+        return
+      }
       rejectMeshCommand(sentMeshId(sent), `Invalid command. ${problem}`, answer)
       return
     }
-    applyMeshCommand(parsed.data, sentMeshId(sent), answer)
+    const command = parsed.data
+    // Creates the renderer every map shares, which a sender asking is about to need anyway.
+    if (command.type === 'cockpit:getMapCapabilities') {
+      reply?.(externalMapCapabilities(command.requestId, mapMeshGlRenderer(meshes) !== undefined))
+      return
+    }
+    applyMeshCommand(command, sentMeshId(sent), answer)
   }
 
   // The singleton outlives every consumer, so this listener is never removed.
