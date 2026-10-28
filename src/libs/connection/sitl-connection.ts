@@ -21,6 +21,8 @@ const ISOLATION_RELOAD_WINDOW_MS = 2000
 const ISOLATION_RELOAD_CLOCK_SKEW_MS = 1000
 // The first visit waits for Cockpit's service worker to download the whole app
 const SERVICE_WORKER_TIMEOUT_MS = 60_000
+// Florianópolis, Brazil, as lat,lng,alt,yaw. Kept equal to the worker's own fallback for pages that do not pass it.
+const DEFAULT_HOME = '-27.598524,-48.459752,0,0'
 const ONLY_ON_PAGES = 'The simulator only runs in the Cockpit web version on GitHub Pages.'
 const VERSION_MISMATCH =
   "The simulator files are from different Cockpit versions (an old cached copy). Reload the page; if it persists, clear this site's data."
@@ -81,6 +83,40 @@ export const onSitlStageChange = (listener: (stage: SitlStage) => void): (() => 
 }
 
 /**
+ * Where a sitl:// connection starts the vehicle
+ */
+export interface SitlHome {
+  /**
+   * Latitude, in degrees
+   */
+  lat: number
+  /**
+   * Longitude, in degrees
+   */
+  lon: number
+}
+
+/**
+ * Reads the position from a SITL home option
+ * @param {string} home The home option, as lat,lon,alt,heading
+ * @returns {SitlHome | null} The position, or null when it is not a valid one
+ */
+export const parseSitlHome = (home: string): SitlHome | null => {
+  const [lat, lon] = home.split(',').map((value) => (value.trim() === '' ? NaN : Number(value)))
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null
+  return { lat, lon }
+}
+
+let activeSitlConnection: SitlConnection | undefined = undefined
+let activeSitlHome: SitlHome | null = null
+
+/**
+ * Where the running sitl:// connection started the vehicle, known as soon as that connection starts
+ * @returns {SitlHome | null} The home position, or null without a sitl:// connection
+ */
+export const getSitlHome = (): SitlHome | null => activeSitlHome
+
+/**
  * Whether this page was opened by the isolation reload, rather than holding a stale copy of its guard
  * @param {string | null} stored When the isolation reload happened, as stored in the session storage
  * @param {number} timeOrigin When this page's navigation started
@@ -124,6 +160,10 @@ export class SitlConnection extends Connection.Abstract {
       return
     }
     sessionStorage.removeItem(RELOAD_KEY)
+    const home = this.uri().entries().get('home') ?? DEFAULT_HOME
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    activeSitlConnection = this
+    activeSitlHome = parseSitlHome(home)
     sitlStartedAt = performance.now()
     setSitlStage('loading-autopilot')
 
@@ -137,10 +177,9 @@ export class SitlConnection extends Connection.Abstract {
     workerUrl.searchParams.set('model', options.get('model') ?? 'vectored')
     workerUrl.searchParams.set('v', appSitlVersion.sitl)
     workerUrl.searchParams.set('channel', sitlPhysicsChannelId)
-    for (const option of ['home', 'defaults']) {
-      const value = options.get(option)
-      if (value !== undefined) workerUrl.searchParams.set(option, value)
-    }
+    workerUrl.searchParams.set('home', home)
+    const defaults = options.get('defaults')
+    if (defaults !== undefined) workerUrl.searchParams.set('defaults', defaults)
     const worker = new Worker(workerUrl, { type: 'module' })
     this._worker = worker
     await new Promise<void>((resolve, reject) => {
@@ -207,6 +246,11 @@ export class SitlConnection extends Connection.Abstract {
    */
   disconnect(): boolean {
     this._disposed = true
+    // The connection replacing this one starts before this one is disconnected
+    if (activeSitlConnection === this) {
+      activeSitlConnection = undefined
+      activeSitlHome = null
+    }
     this._worker?.terminate()
     this._worker = undefined
     setSitlStage('idle')

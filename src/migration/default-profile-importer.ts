@@ -419,7 +419,7 @@ export const buildFreshSimulatorViewsGroupFromDefault = (
     component: WidgetType.Simulator,
     position: { x: 0, y: 0 },
     size: { width: 1, height: 1 },
-    options: {},
+    options: { ping360: true },
   }
   const miniMap: Widget = {
     hash: uuid4(),
