@@ -128,6 +128,38 @@ describe('cockpit:removeMapMeshQuads', () => {
   })
 })
 
+describe('requestId', () => {
+  const { corners, uv, texels } = quads(1)
+  const meshCommands = [
+    {
+      type: 'cockpit:setMapMesh',
+      mesh: { id: 'test-mesh', name: 'Test', capacity: 1, texels: { format: 'r8', width: 1, height: 1 } },
+    },
+    { type: 'cockpit:setMapMeshQuads', id: 'test-mesh', corners, uv, texels },
+    { type: 'cockpit:removeMapMeshQuads', id: 'test-mesh', first: 0, count: 1 },
+    { type: 'cockpit:clearMapMesh', id: 'test-mesh' },
+    { type: 'cockpit:removeMapMesh', id: 'test-mesh' },
+    { type: 'cockpit:setMapMeshPalette', id: 'test-mesh', palette: new Uint8Array(1024) },
+  ]
+
+  it('is optional on every mesh command, and kept when sent', () => {
+    for (const command of meshCommands) {
+      expect(externalMapMeshCommandSchema.safeParse(command).success).toBe(true)
+      expect(externalMapMeshCommandSchema.parse({ ...command, requestId: 'r-1' })).toMatchObject({
+        requestId: 'r-1',
+      })
+    }
+  })
+
+  it('is a non-empty string of at most 256 characters', () => {
+    const [command] = meshCommands
+    for (const requestId of ['', 'x'.repeat(257), 7, null]) {
+      expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId }).success).toBe(false)
+    }
+    expect(externalMapMeshCommandSchema.safeParse({ ...command, requestId: 'x'.repeat(256) }).success).toBe(true)
+  })
+})
+
 describe('externalMapMeshLimits', () => {
   it('are the limits the schema enforces', () => {
     expect(externalMapMeshLimits).toEqual({
