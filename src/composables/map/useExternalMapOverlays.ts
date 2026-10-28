@@ -5,6 +5,7 @@ import { type ComputedRef, computed, ref } from 'vue'
 import { openSnackbar } from '@/composables/snackbar'
 import { listenToGenericWebSocketJsonMessages } from '@/libs/generic-websocket'
 import { MapMeshStore } from '@/libs/map/external-map-meshes'
+import { mapMeshStats, recordMapMeshMs, setMapMeshCpuByteSize } from '@/libs/map/external-map-meshes-stats'
 import {
   type ExternalMapOverlayCommand,
   type ExternalMapOverlayFeature,
@@ -103,6 +104,7 @@ const createState = (): ExternalMapOverlaysState => {
   // The overlays are plain objects, so a large mesh is not made deeply reactive; this counter is what changes.
   const changeCount = ref(0)
   const meshes = new MapMeshStore()
+  setMapMeshCpuByteSize(() => meshes.byteSize())
   const persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   // Coalesced, so a sender updating a saved overlay many times a second does not serialize it on every message.
@@ -250,7 +252,7 @@ const createState = (): ExternalMapOverlaysState => {
         meshes.set(command.mesh)
         return
       case 'cockpit:setMapMeshQuads':
-        meshes.writeQuads(command.id, command)
+        mapMeshStats.quadsWritten += meshes.writeQuads(command.id, command)
         return
       case 'cockpit:removeMapMeshQuads':
         meshes.removeQuads(command.id, command.first, command.count)
@@ -283,7 +285,10 @@ const createState = (): ExternalMapOverlaysState => {
 
   const handleExternalMapOverlayMessage = (message: unknown): void => {
     if (!isExternalMapOverlayCommand(message)) return
+    const parseStart = performance.now()
     const parsed = externalMapOverlayCommandSchema.safeParse(message)
+    const isMeshCommand = parsed.data?.type.includes('MapMesh') ?? false
+    if (isMeshCommand) recordMapMeshMs('parse', performance.now() - parseStart)
     if (!parsed.success) {
       // A malformed mesh can fail on every position, so only the first problem is worth reading.
       const [issue] = parsed.error.issues
@@ -294,7 +299,13 @@ const createState = (): ExternalMapOverlaysState => {
     }
     // Applied once the saved overlays are read, so finishing that read never undoes a newer command.
     storedOverlaysLoaded
-      .then(() => applyCommand(parsed.data))
+      .then(() => {
+        const applyStart = performance.now()
+        applyCommand(parsed.data)
+        if (!isMeshCommand) return
+        mapMeshStats.messagesApplied++
+        recordMapMeshMs('apply', performance.now() - applyStart)
+      })
       .catch((error) => console.warn(`[ExternalMapOverlays] Ignoring command. ${messageFromError(error)}`))
   }
 

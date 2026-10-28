@@ -956,7 +956,7 @@ onMounted(async () => {
 
   // Render any user-loaded GeoTIFF overlays and keep them in sync with the stored metadata
   if (map.value) await mapOverlays.initOverlays(map.value, layerControl)
-  if (map.value) initExternalOverlayLayers(map.value, layerControl)
+  if (map.value) initExternalOverlayLayers(map.value, layerControl, () => widgetStore.isWidgetVisible(widget.value))
 
   // Register any user-defined custom tile providers as selectable base layers on the layer control
   if (map.value)

@@ -3,8 +3,22 @@ import L, { type Map as LeafletMap } from 'leaflet'
 import { watch } from 'vue'
 
 import { type ReceivedMapOverlay, useExternalMapOverlays } from '@/composables/map/useExternalMapOverlays'
+import { openSnackbar } from '@/composables/snackbar'
+import type { MapMesh } from '@/libs/map/external-map-meshes'
+import { mapMeshGlRenderer } from '@/libs/map/external-map-meshes-gl'
+import { ExternalMapMeshesLayer } from '@/libs/map/external-map-meshes-layer'
 
 const OVERLAY_PANE = 'externalOverlayPane'
+const MESH_PANE = 'externalMeshPane'
+
+// Shared by every map, so a mesh that cannot be drawn is reported once rather than once per map and redraw.
+const reportedUndrawableMeshes = new Set<string>()
+const reportUndrawableMesh = (mesh: MapMesh): void => {
+  if (reportedUndrawableMeshes.has(mesh.id)) return
+  reportedUndrawableMeshes.add(mesh.id)
+  const message = `Map meshes need WebGL2, which is not available here, so ${mesh.name} is not drawn.`
+  openSnackbar({ message, variant: 'error' })
+}
 
 // Live senders can update many times a second; redrawing more often than this only costs frames.
 const syncIntervalMs = 250
@@ -74,9 +88,10 @@ interface OverlayEntry {
  */
 export interface UseExternalMapOverlayLayersReturn {
   /**
-   * Draws the received overlays on a Leaflet map, lists them on its layer control, and keeps them in sync.
+   * Draws the received overlays on a Leaflet map, lists them on its layer control, and keeps them in sync. Meshes
+   * are only drawn while `isShown` says the map is.
    */
-  init: (map: LeafletMap, layerControl?: L.Control.Layers) => void
+  init: (map: LeafletMap, layerControl?: L.Control.Layers, isShown?: () => boolean) => void
   /**
    * Stops syncing and removes the overlays from the map and its layer control.
    */
@@ -89,9 +104,10 @@ export interface UseExternalMapOverlayLayersReturn {
  * @returns {UseExternalMapOverlayLayersReturn} Methods to bind and tear down the overlays on a map.
  */
 export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn => {
-  const { overlays } = useExternalMapOverlays()
+  const { overlays, meshes } = useExternalMapOverlays()
 
   const entries = new Map<string, OverlayEntry>()
+  let meshLayer: ExternalMapMeshesLayer | undefined
   let mapRef: LeafletMap | undefined
   let controlRef: L.Control.Layers | undefined
   // Canvas rather than SVG, since a survey can carry thousands of soundings.
@@ -163,14 +179,24 @@ export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn
     }, syncIntervalMs)
   }
 
-  const init = (map: LeafletMap, layerControl?: L.Control.Layers): void => {
+  const init = (map: LeafletMap, layerControl?: L.Control.Layers, isShown = (): boolean => true): void => {
     mapRef = map
     controlRef = layerControl
     // Above the GeoTIFF overlays (250), so contours stay readable over a survey raster, and below the mission
     // and vehicle layers.
     if (!map.getPane(OVERLAY_PANE)) map.createPane(OVERLAY_PANE).style.zIndex = '260'
+    // Between the GeoTIFFs and the GeoJSON overlays, which annotate the meshes.
+    if (!map.getPane(MESH_PANE)) map.createPane(MESH_PANE).style.zIndex = '255'
     sync()
     stopWatch = watch(overlays, scheduleSync)
+    meshLayer = new ExternalMapMeshesLayer({
+      store: meshes,
+      renderer: () => mapMeshGlRenderer(meshes),
+      isShown,
+      onUnsupported: reportUndrawableMesh,
+      pane: MESH_PANE,
+    })
+    map.addLayer(meshLayer)
   }
 
   const destroy = (): void => {
@@ -180,6 +206,8 @@ export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn
     syncTimer = undefined
     for (const id of [...entries.keys()]) removeEntry(id)
     mapRef?.removeLayer(renderer)
+    if (meshLayer) mapRef?.removeLayer(meshLayer)
+    meshLayer = undefined
     mapRef = undefined
     controlRef = undefined
   }
