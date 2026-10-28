@@ -93,6 +93,10 @@ export interface UseExternalMapOverlayLayersReturn {
    */
   init: (map: LeafletMap, layerControl?: L.Control.Layers, isShown?: () => boolean) => void
   /**
+   * Scales the alpha of every mesh drawn on this map, from 0 (none drawn) to 1, before or after `init`.
+   */
+  setMeshOpacity: (opacity: number) => void
+  /**
    * Stops syncing and removes the overlays from the map and its layer control.
    */
   destroy: () => void
@@ -108,6 +112,7 @@ export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn
 
   const entries = new Map<string, OverlayEntry>()
   let meshLayer: ExternalMapMeshesLayer | undefined
+  let meshOpacity = 1
   let mapRef: LeafletMap | undefined
   let controlRef: L.Control.Layers | undefined
   // Canvas rather than SVG, since a survey can carry thousands of soundings.
@@ -196,7 +201,13 @@ export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn
       onUnsupported: reportUndrawableMesh,
       pane: MESH_PANE,
     })
+    meshLayer.setMapAlpha(meshOpacity)
     map.addLayer(meshLayer)
+  }
+
+  const setMeshOpacity = (opacity: number): void => {
+    meshOpacity = opacity
+    meshLayer?.setMapAlpha(opacity)
   }
 
   const destroy = (): void => {
@@ -212,5 +223,5 @@ export const useExternalMapOverlayLayers = (): UseExternalMapOverlayLayersReturn
     controlRef = undefined
   }
 
-  return { init, destroy }
+  return { init, setMeshOpacity, destroy }
 }

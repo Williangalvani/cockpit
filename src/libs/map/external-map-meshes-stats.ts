@@ -24,6 +24,10 @@ export interface MapMeshMapStats {
    * Last full redraw, in main-thread milliseconds
    */
   redrawMsLast: number
+  /**
+   * Multiplier, from 0 to 1, of the alpha the map draws its meshes with
+   */
+  mapAlpha: number
 }
 
 let cpuByteSize = (): number => 0
