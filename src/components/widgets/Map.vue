@@ -191,7 +191,33 @@
                   hide-details
                 />
               </v-col>
+              <v-col cols="4">
+                <v-switch
+                  v-model="widget.options.showMeshLayers"
+                  class="my-1"
+                  :label="t`Mesh layers`"
+                  :color="widget.options.showMeshLayers ? 'white' : undefined"
+                  hide-details
+                  @update:model-value="onShowMeshLayersToggled"
+                />
+              </v-col>
             </v-row>
+            <v-slider
+              v-if="widget.options.showMeshLayers"
+              v-model="widget.options.meshOpacity"
+              :label="t`Mesh opacity`"
+              color="white"
+              :min="0"
+              :max="1"
+              :step="0.05"
+              hide-details
+              class="mt-2"
+              @end="onMeshOpacityCommitted"
+            >
+              <template #append>
+                <span class="text-sm w-[48px] text-right">{{ Math.round(widget.options.meshOpacity * 100) }}%</span>
+              </template>
+            </v-slider>
           </template>
         </ExpansiblePanel>
       </v-card-text>
@@ -278,7 +304,7 @@ import { confirmRemoveBaseStation, useBaseStation } from '@/composables/baseStat
 import { useBaseStationOverlay } from '@/composables/baseStation/useBaseStationOverlay'
 import { useInteractionDialog } from '@/composables/interactionDialog'
 import { useCustomTileProviders } from '@/composables/map/useCustomTileProviders'
-import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
+import { defaultMeshOpacity, useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useExternalMapOverlayLayers } from '@/composables/map/useExternalMapOverlayLayers'
 import { useHasAnyMapOverlay } from '@/composables/map/useExternalMapOverlays'
 import { useHazardOverlay } from '@/composables/map/useHazardOverlay'
@@ -654,6 +680,8 @@ onBeforeMount(() => {
     showVehicleArrow: true,
     showBaseStationArrow: true,
     shownHazardSources: [] as HazardSourceId[],
+    showMeshLayers: true,
+    meshOpacity: defaultMeshOpacity,
   }
   widget.value.options = { ...defaultOptions, ...widget.value.options }
   if (isFlightVisible.value) targetFollower.enableAutoUpdate()
@@ -677,7 +705,20 @@ const { init: initExternalOverlayLayers, destroy: destroyExternalOverlayLayers }
 const hasAnyMapOverlay = useHasAnyMapOverlay()
 
 // Draws the meshes external software (BlueOS extensions, embedded pages) sent onto this map
-const { init: initExternalMeshLayers, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
+const {
+  init: initExternalMeshLayers,
+  setMeshOpacity,
+  setMeshesShown,
+  destroy: destroyExternalMeshLayers,
+} = useExternalMapMeshLayers()
+watch(() => widget.value.options.meshOpacity, setMeshOpacity, { immediate: true })
+watch(() => widget.value.options.showMeshLayers, setMeshesShown, { immediate: true })
+const onMeshOpacityCommitted = (value: number): void => {
+  logUserAction(`Set the map widget mesh opacity to ${Math.round(value * 100)}%`)
+}
+const onShowMeshLayersToggled = (value: boolean | null): void => {
+  logUserAction(`${value ? 'Showed' : 'Hid'} the mesh layers on the map widget`)
+}
 
 // Draws the coastline, restricted-area and airspace advisories the operator has loaded
 // Chosen per widget, so hiding a layer here leaves Mission Planning's hazard checks alone.
