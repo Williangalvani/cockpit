@@ -275,6 +275,7 @@ import { confirmRemoveBaseStation, useBaseStation } from '@/composables/baseStat
 import { useBaseStationOverlay } from '@/composables/baseStation/useBaseStationOverlay'
 import { useInteractionDialog } from '@/composables/interactionDialog'
 import { useCustomTileProviders } from '@/composables/map/useCustomTileProviders'
+import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useExternalMapOverlayLayers } from '@/composables/map/useExternalMapOverlayLayers'
 import { useHasAnyMapOverlay } from '@/composables/map/useExternalMapOverlays'
 import { useMapAutoResize } from '@/composables/map/useMapAutoResize'
@@ -672,6 +673,9 @@ const overlaysDialogOpen = ref(false)
 const { init: initExternalOverlayLayers, destroy: destroyExternalOverlayLayers } = useExternalMapOverlayLayers()
 const hasAnyMapOverlay = useHasAnyMapOverlay()
 
+// Draws the meshes external software (BlueOS extensions, embedded pages) sent onto this map
+const { init: initExternalMeshLayers, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
+
 // Registers user-defined custom tile providers (URL templates and imported archives) as selectable base layers
 const { init: initCustomTileProviders, destroy: destroyCustomTileProviders } = useCustomTileProviders()
 
@@ -957,6 +961,7 @@ onMounted(async () => {
   // Render any user-loaded GeoTIFF overlays and keep them in sync with the stored metadata
   if (map.value) await mapOverlays.initOverlays(map.value, layerControl)
   if (map.value) initExternalOverlayLayers(map.value, layerControl)
+  if (map.value) initExternalMeshLayers(map.value, () => widgetStore.isWidgetVisible(widget.value))
 
   // Register any user-defined custom tile providers as selectable base layers on the layer control
   if (map.value)
@@ -1171,6 +1176,7 @@ onBeforeUnmount(() => {
   detachTileFallbacks.forEach((detach) => detach())
   mapOverlays.destroyOverlays()
   destroyExternalOverlayLayers()
+  destroyExternalMeshLayers()
   destroyCustomTileProviders()
 
   if (map.value) {
