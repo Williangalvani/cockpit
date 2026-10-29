@@ -19,6 +19,12 @@ const reportUndrawableMesh = (mesh: MapMesh): void => {
 }
 
 /**
+ * Mesh opacity the Map and MiniMap widgets start with, so the map shows through a mesh's faintest texels, drawn at
+ * about half opacity, while its opaque ones keep their full contrast.
+ */
+export const defaultMeshOpacity = 0.5
+
+/**
  * Return type of {@link useExternalMapMeshLayers}.
  */
 export interface UseExternalMapMeshLayersReturn {
@@ -27,6 +33,11 @@ export interface UseExternalMapMeshLayersReturn {
    * using it has unmounted, which a caller awaiting other layers before this can reach.
    */
   init: (map: LeafletMap, isShown?: () => boolean) => void
+  /**
+   * Sets the opacity, from 0 to 1, the meshes on this map draw their faintest texels with, from hidden to opaque,
+   * every texel with any alpha rising toward opaque with it while empty ones never draw, before or after `init`.
+   */
+  setMeshOpacity: (opacity: number) => void
   /**
    * Removes the meshes from the map.
    */
@@ -42,6 +53,7 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
   const { meshes } = useExternalMapMeshes()
 
   let meshLayer: ExternalMapMeshesLayer | undefined
+  let meshOpacity = 1
   let mapRef: LeafletMap | undefined
   let unmounted = false
   if (getCurrentScope()) onScopeDispose(() => (unmounted = true))
@@ -58,7 +70,13 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
       onUnsupported: reportUndrawableMesh,
       pane: MESH_PANE,
     })
+    meshLayer.setMapAlpha(meshOpacity)
     map.addLayer(meshLayer)
+  }
+
+  const setMeshOpacity = (opacity: number): void => {
+    meshOpacity = opacity
+    meshLayer?.setMapAlpha(opacity)
   }
 
   const destroy = (): void => {
@@ -67,5 +85,5 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
     mapRef = undefined
   }
 
-  return { init, destroy }
+  return { init, setMeshOpacity, destroy }
 }
