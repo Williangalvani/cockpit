@@ -99,21 +99,6 @@
           class="mt-4 mb-2 w-[90%]"
           @end="onEdgeFadeCommitted"
         />
-        <v-slider
-          v-if="externalMeshCount > 0"
-          v-model="widget.options.meshOpacity"
-          label="Mesh opacity"
-          color="white"
-          :min="0"
-          :max="1"
-          :step="0.05"
-          thumb-label
-          hide-details
-          class="mt-4 mb-2 w-[90%]"
-          @end="onMeshOpacityCommitted"
-        >
-          <template #thumb-label="{ modelValue }">{{ Math.round(modelValue * 100) }}%</template>
-        </v-slider>
 
         <v-switch
           v-model="widget.options.headingUp"
@@ -158,6 +143,28 @@
           hide-details
           @update:model-value="onShowMapOverlaysToggled"
         />
+        <v-switch
+          v-model="widget.options.showMeshLayers"
+          label="Mesh layers"
+          :color="widget.options.showMeshLayers ? 'white' : undefined"
+          hide-details
+          @update:model-value="onShowMeshLayersToggled"
+        />
+        <v-slider
+          v-if="externalMeshCount > 0 && widget.options.showMeshLayers"
+          v-model="widget.options.meshOpacity"
+          label="Mesh opacity"
+          color="white"
+          :min="0"
+          :max="1"
+          :step="0.05"
+          thumb-label
+          hide-details
+          class="mt-4 mb-2 w-[90%]"
+          @end="onMeshOpacityCommitted"
+        >
+          <template #thumb-label="{ modelValue }">{{ Math.round(modelValue * 100) }}%</template>
+        </v-slider>
 
         <v-divider class="opacity-10 mb-4" />
         <div class="mb-3">
@@ -263,6 +270,7 @@ const defaultOptions = {
   showMission: false,
   showVehiclePath: false,
   showMapOverlays: false,
+  showMeshLayers: true,
   meshOpacity: defaultMeshOpacity,
   zoom: 18,
 }
@@ -395,6 +403,7 @@ const hasMapOverlays = computed(() => missionStore.mapOverlays.length > 0)
 const externalMeshLayers = useExternalMapMeshLayers()
 const { meshCount: externalMeshCount } = useExternalMapMeshes()
 watch(() => widget.value.options.meshOpacity, externalMeshLayers.setMeshOpacity, { immediate: true })
+watch(() => widget.value.options.showMeshLayers, externalMeshLayers.setMeshesShown, { immediate: true })
 
 const bindMapOverlays = (): void => {
   if (!map.value) return
@@ -405,7 +414,7 @@ const bindMapOverlays = (): void => {
 
 onMounted(() => {
   if (mapEl.value) init(mapEl.value)
-  if (map.value) externalMeshLayers.init(map.value)
+  if (map.value) externalMeshLayers.init(map.value, () => widgetStore.isWidgetVisible(widget.value))
   if (widget.value.options.showMapOverlays) bindMapOverlays()
 })
 
@@ -455,6 +464,11 @@ const toggleShowMapOverlays = (): void => {
   logUserAction(`${widget.value.options.showMapOverlays ? 'Showed' : 'Hid'} the map overlays on the MiniMap`)
 }
 
+const toggleShowMeshLayers = (): void => {
+  widget.value.options.showMeshLayers = !widget.value.options.showMeshLayers
+  logUserAction(`${widget.value.options.showMeshLayers ? 'Showed' : 'Hid'} the mesh layers on the MiniMap`)
+}
+
 const toggleShowNorthIndicator = (): void => {
   widget.value.options.showNorthIndicator = !widget.value.options.showNorthIndicator
   logUserAction(`${widget.value.options.showNorthIndicator ? 'Showed' : 'Hid'} the MiniMap north indicator`)
@@ -487,6 +501,13 @@ const menuItems = computed<ContextMenuItem[]>(() => {
       item: `${widget.value.options.showMapOverlays ? 'Hide' : 'Show'} map overlays`,
       icon: 'mdi-image-multiple',
       action: toggleShowMapOverlays,
+    })
+  }
+  if (externalMeshCount.value > 0) {
+    items.push({
+      item: `${widget.value.options.showMeshLayers ? 'Hide' : 'Show'} mesh layers`,
+      icon: 'mdi-layers',
+      action: toggleShowMeshLayers,
     })
   }
   items.push(
@@ -553,6 +574,10 @@ const onShowNorthIndicatorToggled = (value: boolean | null): void => {
 
 const onShowMapOverlaysToggled = (value: boolean | null): void => {
   logUserAction(`${value ? 'Enabled' : 'Disabled'} MiniMap map overlays`)
+}
+
+const onShowMeshLayersToggled = (value: boolean | null): void => {
+  logUserAction(`${value ? 'Enabled' : 'Disabled'} MiniMap mesh layers`)
 }
 
 const poiSelectItems = computed(() => dynamicPois.value.map((poi) => ({ title: poi.name, value: poi.id })))
