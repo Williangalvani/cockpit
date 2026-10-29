@@ -6783,6 +6783,14 @@ msgstr "Limite médio (V)"
 msgid "Menu"
 msgstr "Menu"
 
+#: src/components/widgets/Map.vue
+msgid "Mesh layers"
+msgstr ""
+
+#: src/components/widgets/Map.vue
+msgid "Mesh opacity"
+msgstr ""
+
 #: src/views/ConfigurationMAVLinkView.vue
 msgid "Message"
 msgstr "Mensagem"
