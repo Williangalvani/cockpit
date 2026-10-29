@@ -189,9 +189,19 @@
                   hide-details
                 />
               </v-col>
+              <v-col cols="4">
+                <v-switch
+                  v-model="widget.options.showMeshLayers"
+                  class="my-1"
+                  label="Mesh layers"
+                  :color="widget.options.showMeshLayers ? 'white' : undefined"
+                  hide-details
+                  @update:model-value="onShowMeshLayersToggled"
+                />
+              </v-col>
             </v-row>
             <v-slider
-              v-if="externalMeshCount > 0"
+              v-if="externalMeshCount > 0 && widget.options.showMeshLayers"
               v-model="widget.options.meshOpacity"
               label="Mesh opacity"
               color="white"
@@ -665,6 +675,7 @@ onBeforeMount(() => {
     showHomeArrow: true,
     showVehicleArrow: true,
     showBaseStationArrow: true,
+    showMeshLayers: true,
     meshOpacity: defaultMeshOpacity,
   }
   widget.value.options = { ...defaultOptions, ...widget.value.options }
@@ -686,11 +697,20 @@ const overlayLoadingIds = mapOverlays.loadingIds
 const overlaysDialogOpen = ref(false)
 
 // Draws the meshes external software (BlueOS extensions, embedded pages) sent onto this map
-const { init: initExternalMeshLayers, setMeshOpacity, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
+const {
+  init: initExternalMeshLayers,
+  setMeshOpacity,
+  setMeshesShown,
+  destroy: destroyExternalMeshLayers,
+} = useExternalMapMeshLayers()
 const { meshCount: externalMeshCount } = useExternalMapMeshes()
 watch(() => widget.value.options.meshOpacity, setMeshOpacity, { immediate: true })
+watch(() => widget.value.options.showMeshLayers, setMeshesShown, { immediate: true })
 const onMeshOpacityCommitted = (value: number): void => {
   logUserAction(`Set the map widget mesh opacity to ${Math.round(value * 100)}%`)
+}
+const onShowMeshLayersToggled = (value: boolean | null): void => {
+  logUserAction(`${value ? 'Showed' : 'Hid'} the mesh layers on the map widget`)
 }
 
 // Registers user-defined custom tile providers (URL templates and imported archives) as selectable base layers
