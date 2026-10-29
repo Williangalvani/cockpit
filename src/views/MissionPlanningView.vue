@@ -975,6 +975,7 @@ import { useMissionPathSignalOverlay } from '@/composables/baseStation/useMissio
 import { useInteractionDialog } from '@/composables/interactionDialog'
 import { useCustomTileProviders } from '@/composables/map/useCustomTileProviders'
 import { useDragMeasureOverlay } from '@/composables/map/useDragMeasureOverlay'
+import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useExternalMapOverlayLayers } from '@/composables/map/useExternalMapOverlayLayers'
 import { useFenceDrawing } from '@/composables/map/useFenceDrawing'
 import { useLiveMeasureOverlay } from '@/composables/map/useLiveMeasureOverlay'
@@ -1412,6 +1413,9 @@ const overlaysDialogOpen = ref(false)
 
 // Draws the overlays external software (BlueOS extensions, embedded pages) sent onto the planning map
 const { init: initExternalOverlayLayers, destroy: destroyExternalOverlayLayers } = useExternalMapOverlayLayers()
+
+// Draws the meshes external software (BlueOS extensions, embedded pages) sent onto the planning map
+const { init: initExternalMeshLayers, destroy: destroyExternalMeshLayers } = useExternalMapMeshLayers()
 
 // Registers user-defined custom tile providers (URL templates and imported archives) as selectable base layers
 const { init: initCustomTileProviders, destroy: destroyCustomTileProviders } = useCustomTileProviders()
@@ -5048,6 +5052,7 @@ onMounted(async () => {
   await mapOverlays.initOverlays(planningMap.value, layerControl)
   if (unmounted) return
   initExternalOverlayLayers(planningMap.value, layerControl)
+  initExternalMeshLayers(planningMap.value)
 
   // Register any user-defined custom tile providers as selectable base layers on the layer control
   initCustomTileProviders(planningMap.value, layerControl, Object.values(tileLayers.baseMaps), preferredBaseLayer)
@@ -5132,6 +5137,7 @@ onUnmounted(() => {
   stopTileFallbackWatcher = undefined
   mapOverlays.destroyOverlays()
   destroyExternalOverlayLayers()
+  destroyExternalMeshLayers()
   destroyCustomTileProviders()
 
   // Reset the map context so descendants stop reacting to the destroyed instance

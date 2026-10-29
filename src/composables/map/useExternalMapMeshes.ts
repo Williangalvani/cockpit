@@ -5,6 +5,7 @@ import {
   isExternalMapMeshCommand,
 } from '@/libs/map/external-map-mesh-api'
 import { MapMeshStore } from '@/libs/map/external-map-meshes'
+import { mapMeshStats, recordMapMeshMs, setMapMeshCpuByteSize } from '@/libs/map/external-map-meshes-stats'
 import { messageFromError } from '@/libs/utils'
 
 /**
@@ -25,6 +26,7 @@ let state: ExternalMapMeshesState | undefined
 
 const createState = (): ExternalMapMeshesState => {
   const meshes = new MapMeshStore()
+  setMapMeshCpuByteSize(() => meshes.byteSize())
 
   const applyCommand = (command: ExternalMapMeshCommand): void => {
     switch (command.type) {
@@ -32,7 +34,7 @@ const createState = (): ExternalMapMeshesState => {
         meshes.set(command.mesh)
         return
       case 'cockpit:setMapMeshQuads':
-        meshes.writeQuads(command.id, command)
+        mapMeshStats.quadsWritten += meshes.writeQuads(command.id, command)
         return
       case 'cockpit:removeMapMeshQuads':
         meshes.removeQuads(command.id, command.first, command.count)
@@ -50,7 +52,9 @@ const createState = (): ExternalMapMeshesState => {
 
   const handleExternalMapMeshMessage = (message: unknown): void => {
     if (!isExternalMapMeshCommand(message)) return
+    const parseStart = performance.now()
     const parsed = externalMapMeshCommandSchema.safeParse(message)
+    if (parsed.success) recordMapMeshMs('parse', performance.now() - parseStart)
     if (!parsed.success) {
       // A malformed mesh can fail on every position, so only the first problem is worth reading.
       const [issue] = parsed.error.issues
@@ -59,11 +63,15 @@ const createState = (): ExternalMapMeshesState => {
       console.warn(`[ExternalMapMeshes] Ignoring invalid command. ${issue.path.join('.')}: ${issue.message}${more}`)
       return
     }
+    const applyStart = performance.now()
     try {
       applyCommand(parsed.data)
     } catch (error) {
       console.warn(`[ExternalMapMeshes] Ignoring command. ${messageFromError(error)}`)
+      return
     }
+    mapMeshStats.messagesApplied++
+    recordMapMeshMs('apply', performance.now() - applyStart)
   }
 
   // The singleton outlives every consumer, so this listener is never removed.
