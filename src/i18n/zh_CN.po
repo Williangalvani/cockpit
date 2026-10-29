@@ -6356,6 +6356,14 @@ msgstr "中阈值（V）"
 msgid "Menu"
 msgstr "菜单"
 
+#: src/components/widgets/Map.vue
+msgid "Mesh layers"
+msgstr ""
+
+#: src/components/widgets/Map.vue
+msgid "Mesh opacity"
+msgstr ""
+
 #: src/views/ConfigurationMAVLinkView.vue
 msgid "Message"
 msgstr "消息"
