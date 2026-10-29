@@ -66,6 +66,7 @@ uniform sampler2D palette;
 uniform bool paletted;
 uniform vec2 stripSize;
 uniform vec2 pageSize;
+uniform float lowAlphaFade;
 in vec2 uv;
 flat in vec2 stripOrigin;
 flat in vec4 quadTint;
@@ -76,11 +77,37 @@ void main() {
   vec4 texel = texture(texels, (stripOrigin + inStrip) / pageSize);
   vec4 straight = paletted ? texture(palette, vec2((texel.r * 255.0 + 0.5) / 256.0, 0.5)) : texel;
   straight *= quadTint;
+  // As fadeLowAlpha computes it: empty texels never draw, the rest rise from a squared at 0 to opaque at 1.
+  float a = clamp(straight.a, 0.0, 1.0);
+  float alpha = a > 0.0 ? mix(a * a, 1.0, clamp(lowAlphaFade, 0.0, 1.0)) : 0.0;
   // Premultiplied, and mixed into what older quads of the mesh drew by the blend state render() sets.
-  color = vec4(straight.rgb * straight.a, straight.a);
+  color = vec4(straight.rgb * alpha, alpha);
 }`
 
-const uniformNames = ['offset', 'scale', 'firstSlot', 'stripsPerRow', 'stripSize', 'pageSize', 'paletted'] as const
+const uniformNames = [
+  'offset',
+  'scale',
+  'firstSlot',
+  'stripsPerRow',
+  'stripSize',
+  'pageSize',
+  'paletted',
+  'lowAlphaFade',
+] as const
+
+/**
+ * The alpha the fragment shader draws a texel with, for a map whose mesh opacity is `fade`: empty texels never
+ * draw, and the rest rise from their alpha squared at 0 to opaque at 1, so the faintest show at about the opacity
+ * itself and can be hidden or shown completely, while opaque ones stay opaque at any value.
+ * @param {number} alpha - The texel's straight alpha, times its tint's, from 0 to 1; anything else is clamped
+ * @param {number} fade - The map's mesh opacity, from 0 to 1; anything else is clamped
+ * @returns {number} 0 for an empty texel, else `mix(alpha * alpha, 1, fade)`
+ */
+export const fadeLowAlpha = (alpha: number, fade: number): number => {
+  const a = Math.min(Math.max(alpha, 0), 1)
+  const f = Math.min(Math.max(fade, 0), 1)
+  return a > 0 ? a * a * (1 - f) + f : 0
+}
 
 /**
  * Weight a quad mixes into what older quads of its mesh drew under it with, wherever it is not the first to cover a
@@ -214,9 +241,10 @@ export class MapMeshGlRenderer implements MapMeshRenderer {
    * valid until the current task ends.
    * @param {MapMesh} mesh - The mesh
    * @param {MapMeshView} view - Area of the map
+   * @param {number} lowAlphaFade - The map's mesh opacity, raising each drawn texel's alpha as {@link fadeLowAlpha} does
    * @returns {boolean} Whether anything was drawn
    */
-  render(mesh: MapMesh, view: MapMeshView): boolean {
+  render(mesh: MapMesh, view: MapMeshView, lowAlphaFade: number): boolean {
     const { gl, canvas } = this
     if (gl.isContextLost()) return false
     this.store.flush(this)
@@ -244,6 +272,7 @@ export class MapMeshGlRenderer implements MapMeshRenderer {
     gl.uniform1i(uniforms.stripsPerRow, mesh.stripsPerRow)
     gl.uniform2f(uniforms.stripSize, mesh.stripWidth, mesh.stripHeight)
     gl.uniform1i(uniforms.paletted, mesh.format === 'r8' ? 1 : 0)
+    gl.uniform1f(uniforms.lowAlphaFade, lowAlphaFade)
     gl.activeTexture(gl.TEXTURE1)
     gl.bindTexture(gl.TEXTURE_2D, gpu.palette)
     gl.activeTexture(gl.TEXTURE0)

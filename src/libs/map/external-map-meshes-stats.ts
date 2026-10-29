@@ -24,6 +24,10 @@ export interface MapMeshMapStats {
    * Last full redraw, in main-thread milliseconds
    */
   redrawMsLast: number
+  /**
+   * Alpha, from 0 to 1, the map draws its meshes' faintest texels with, from hidden to opaque
+   */
+  mapAlpha: number
 }
 
 let cpuByteSize = (): number => 0

@@ -1,7 +1,13 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import { type MapMesh, latToMercatorY, lonToMercatorX, MapMeshStore } from '@/libs/map/external-map-meshes'
-import { MapMeshGlRenderer, mapMeshGlRenderer, meshMixWeight, mixReadings } from '@/libs/map/external-map-meshes-gl'
+import {
+  fadeLowAlpha,
+  MapMeshGlRenderer,
+  mapMeshGlRenderer,
+  meshMixWeight,
+  mixReadings,
+} from '@/libs/map/external-map-meshes-gl'
 
 type GlCall = [string, unknown[]]
 
@@ -53,23 +59,26 @@ const renderWrappedRing = (): GlCall[] => {
   const originX = lonToMercatorX(-48.55) - 100
   const originY = latToMercatorY(-27.59) + 100
   const mesh = store.meshes.get('scan') as MapMesh
-  expect(renderer.render(mesh, { width: 400, height: 400, originX, originY, metresPerPixel: 1 })).toBe(true)
+  expect(renderer.render(mesh, { width: 400, height: 400, originX, originY, metresPerPixel: 1 }, 0.5)).toBe(true)
   return calls
 }
 
 describe('MapMeshGlRenderer', () => {
-  test('outputs premultiplied colour after the palette and tint, discarding nothing', () => {
+  test('outputs premultiplied colour after the palette, tint and fade, discarding nothing', () => {
     const [gl, calls] = recordingGl()
     new MapMeshGlRenderer(document.createElement('canvas'), gl, new MapMeshStore())
     const fragment = fragmentSource(calls)
     expect(fragment).not.toContain('discard')
     const tinted = fragment.indexOf('straight *= quadTint;')
     expect(tinted).toBeGreaterThan(0)
-    expect(fragment.indexOf('color = vec4(straight.rgb * straight.a, straight.a);')).toBeGreaterThan(tinted)
+    const faded = fragment.indexOf('float alpha = a > 0.0 ? mix(a * a, 1.0, clamp(lowAlphaFade, 0.0, 1.0)) : 0.0;')
+    expect(faded).toBeGreaterThan(tinted)
+    expect(fragment.indexOf('color = vec4(straight.rgb * alpha, alpha);')).toBeGreaterThan(faded)
   })
 
-  test('draws a wrapped ring oldest to newest, across pages, first exactly then mixed', () => {
+  test("draws a wrapped ring oldest to newest, across pages, with the map's fade, first exactly then mixed", () => {
     const calls = renderWrappedRing()
+    expect(calls).toContainEqual(['uniform1f', ['lowAlphaFade', 0.5]])
     expect(calls).toContainEqual(['clearStencil', [0]])
 
     // Pages hold 4 slots: slots 2 and 3 of the first page, 4 and 5 of the second, then 0 and 1 of the first.
@@ -148,5 +157,58 @@ describe('mixReadings', () => {
     const older: [number, number, number, number] = [1, 0, 0, 1]
     const newer: [number, number, number, number] = [0, 0, 0.25, 0.5]
     mixReadings([older, newer]).forEach((value, i) => expect(value).toBeCloseTo(0.4 * older[i] + 0.6 * newer[i], 12))
+  })
+})
+
+const fades = [0, 0.25, 0.5, 1]
+const steps = Array.from({ length: 21 }, (_, index) => index / 20)
+
+describe('fadeLowAlpha', () => {
+  const faintest = 1 / 255
+
+  test('keeps empty texels empty and opaque texels opaque at any fade', () => {
+    for (const fade of fades) {
+      expect(fadeLowAlpha(0, fade)).toBe(0)
+      expect(fadeLowAlpha(1, fade)).toBe(1)
+    }
+  })
+
+  test('hides the faintest texel at a fade of 0, draws it at the fade in between and opaque at 1', () => {
+    expect(fadeLowAlpha(faintest, 0)).toBeLessThan(0.5 / 255)
+    expect(fadeLowAlpha(faintest, 0.5)).toBeCloseTo(0.5, 4)
+    expect(fadeLowAlpha(faintest, 1)).toBe(1)
+  })
+
+  test('draws every texel with any alpha opaque at a fade of 1', () => {
+    for (const alpha of steps.slice(1)) expect(fadeLowAlpha(alpha, 1)).toBe(1)
+  })
+
+  test('squares the alpha at a fade of 0, and matches known values', () => {
+    for (const alpha of steps) expect(fadeLowAlpha(alpha, 0)).toBeCloseTo(alpha * alpha, 12)
+    expect(fadeLowAlpha(0.5, 0)).toBe(0.25)
+    expect(fadeLowAlpha(0.5, 0.5)).toBe(0.625)
+    expect(fadeLowAlpha(0.5, 1)).toBe(1)
+  })
+
+  test('grows with the alpha and with the fade', () => {
+    for (const fade of fades) {
+      const faded = steps.map((alpha) => fadeLowAlpha(alpha, fade))
+      expect(faded[1]).toBeGreaterThan(faded[0])
+      faded.slice(2).forEach((value, index) => {
+        if (fade < 1) expect(value).toBeGreaterThan(faded[index + 1])
+        else expect(value).toBe(faded[index + 1])
+      })
+    }
+    for (const alpha of steps) {
+      const faded = steps.map((fade) => fadeLowAlpha(alpha, fade))
+      faded.slice(1).forEach((value, index) => expect(value).toBeGreaterThanOrEqual(faded[index]))
+    }
+  })
+
+  test('clamps the alpha and the fade to between 0 and 1', () => {
+    expect(fadeLowAlpha(-0.5, 0.5)).toBe(0)
+    expect(fadeLowAlpha(1.5, 0.5)).toBe(1)
+    expect(fadeLowAlpha(0.5, -1)).toBe(fadeLowAlpha(0.5, 0))
+    expect(fadeLowAlpha(0.5, 2)).toBe(fadeLowAlpha(0.5, 1))
   })
 })
