@@ -204,8 +204,11 @@ export function setMapMesh(mesh: ExternalMapMesh, requestId?: string): void {
  * readings all but replace it. With `filter: 'linear'`, r8 indices are interpolated before the palette lookup, so an
  * edge between index 0 and data samples the entries in between, and rgba8 straight colors are interpolated before
  * premultiplying, so a transparent texel's color bleeds into its neighbor's edge: give transparent texels their
- * neighbors' color, or use `'nearest'`, to avoid a dark fringe. The mesh's opacity fades the result once. The typed
- * arrays' buffers are transferred to Cockpit, so they are unusable here afterwards.
+ * neighbors' color, or use `'nearest'`, to avoid a dark fringe. The mesh's opacity fades the result once. Each map also
+ * has a mesh opacity setting o: a texel of zero alpha is never drawn, and one of alpha a > 0 is drawn with alpha a² +
+ * o·(1 − a²), which is a² at o = 0 and opaque at o = 1. Give the lowest alphas to readings the user should be able to
+ * hide or show completely, such as silence, and full alpha to whatever should always show. The typed arrays' buffers
+ * are transferred to Cockpit, so they are unusable here afterwards.
  * @param {string} id - The id of the mesh
  * @param {ExternalMapMeshQuads} quads - Per quad: 4 longitude/latitude corners in ring order, 4 uv in texels of
  * the quad's strip (texel centers at +0.5, with v counting rows from the first row sent), its strip of texels, row by
