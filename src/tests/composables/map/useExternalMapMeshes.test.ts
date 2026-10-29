@@ -276,3 +276,16 @@ describe('replaying a mesh on a new connection', () => {
     ])
   })
 })
+
+describe('meshCount', () => {
+  test('follows meshes being added and removed, but not quads being written', () => {
+    const { meshCount } = useExternalMapMeshes()
+    const before = meshCount.value
+    send({ type: 'cockpit:setMapMesh', mesh: mesh('count') })
+    expect(meshCount.value).toBe(before + 1)
+    send({ type: 'cockpit:setMapMeshQuads', id: 'count', ...quads(2) })
+    expect(meshCount.value).toBe(before + 1)
+    send({ type: 'cockpit:removeMapMesh', id: 'count' })
+    expect(meshCount.value).toBe(before)
+  })
+})
