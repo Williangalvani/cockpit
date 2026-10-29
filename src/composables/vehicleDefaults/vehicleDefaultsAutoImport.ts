@@ -4,6 +4,7 @@ import { useBlueOsStorage } from '@/composables/settingsSyncer'
 import { openSnackbar } from '@/composables/snackbar'
 import * as Connection from '@/libs/connection/connection'
 import { MavType } from '@/libs/connection/m2r/messages/mavlink2rest-enum'
+import { buildUrlTileProvider } from '@/libs/map/tile-provider-import'
 import {
   buildFreshSimulatorViewsGroupFromDefault,
   buildFreshViewsGroupFromDefault,
@@ -13,7 +14,9 @@ import {
 import { useAppInterfaceStore } from '@/stores/appInterface'
 import { useControllerStore } from '@/stores/controller'
 import { useMainVehicleStore } from '@/stores/mainVehicle'
+import { useMissionStore } from '@/stores/mission'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
+import { bluesimReefTileSource } from '@/utils/custom-tile-providers-migration'
 
 /**
  * Single source for the per-vehicle "the user already handled the defaults walkthrough" flag.
@@ -25,6 +28,13 @@ export const useVehicleDefaultsHandledFlag = (): Ref<boolean> =>
 
 const sitlVehicleTypes: Record<string, MavType> = { ardusub: MavType.MAV_TYPE_SUBMARINE }
 
+// BlueSim ships top-down tiles of the level the Simulator widget starts by default, the reef
+const simulatorTileProviderInput = {
+  name: 'BlueSim reef',
+  ...bluesimReefTileSource,
+  attribution: 'BlueSim',
+}
+
 /**
  * Wires the per-vehicle defaults flow to the `vehicle-sync-complete` event.
  *
@@ -33,7 +43,8 @@ const sitlVehicleTypes: Record<string, MavType> = { ardusub: MavType.MAV_TYPE_SU
  * - Otherwise run the evaluator, silently auto-import any side that comes back as `auto-import`
  *   (with a per-side success snackbar), then re-evaluate. Open the auto import modal when any side
  *   still says `offer`; if nothing is left to offer, just persist the handled flag.
- * - On setup, a SITL with external physics and a blank views group gets the default views with the Simulator widget.
+ * - On setup, a SITL with external physics and a blank views group gets the default views with the Simulator widget,
+ *   and the simulated level's map tiles as a custom tile provider.
  *
  * The flag lives in `useBlueOsStorage`, so settings-v2 scopes it automatically to the current
  * (user, vehicle) pair — no per-vehicle-type bookkeeping is needed.
@@ -43,6 +54,7 @@ export const useVehicleDefaultsAutoImport = (): void => {
   const controllerStore = useControllerStore()
   const interfaceStore = useAppInterfaceStore()
   const mainVehicleStore = useMainVehicleStore()
+  const missionStore = useMissionStore()
   const defaultsHandled = useVehicleDefaultsHandledFlag()
 
   const handleSyncComplete = (): void => {
@@ -108,7 +120,13 @@ export const useVehicleDefaultsAutoImport = (): void => {
         controllerStore.protocolMapping
       )
       if (views.action !== 'auto-import' || !views.defaultProfile) return
-      widgetStore.viewsGroup = buildFreshSimulatorViewsGroupFromDefault(views.defaultProfile)
+      const existingProvider = missionStore.customTileProviders.find(
+        (provider) => provider.urlTemplate === simulatorTileProviderInput.urlTemplate
+      )
+      const tileProvider = existingProvider ?? buildUrlTileProvider(simulatorTileProviderInput)
+      if (!existingProvider) missionStore.addCustomTileProvider(tileProvider)
+      missionStore.userLastCustomMapProviderId = tileProvider.id
+      widgetStore.viewsGroup = buildFreshSimulatorViewsGroupFromDefault(views.defaultProfile, tileProvider.id)
       openSnackbar({
         message: `Imported default views for ${vehicleTypeName}, with the simulator.`,
         variant: 'success',
