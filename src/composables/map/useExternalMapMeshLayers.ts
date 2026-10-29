@@ -18,6 +18,11 @@ const reportUndrawableMesh = (mesh: MapMesh): void => {
 }
 
 /**
+ * Mesh opacity the Map and MiniMap widgets start with, so a mesh does not hide the map under it.
+ */
+export const defaultMeshOpacity = 0.5
+
+/**
  * Return type of {@link useExternalMapMeshLayers}.
  */
 export interface UseExternalMapMeshLayersReturn {

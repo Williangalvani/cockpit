@@ -292,7 +292,7 @@ import { useBaseStationOverlay } from '@/composables/baseStation/useBaseStationO
 import { useInteractionDialog } from '@/composables/interactionDialog'
 import { useCustomTileProviders } from '@/composables/map/useCustomTileProviders'
 import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
-import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
+import { defaultMeshOpacity, useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useMapAutoResize } from '@/composables/map/useMapAutoResize'
 import { useMapBoxZoom } from '@/composables/map/useMapBoxZoom'
 import { useMapCenterFromUserLocation } from '@/composables/map/useMapCenterFromUserLocation'
@@ -665,7 +665,7 @@ onBeforeMount(() => {
     showHomeArrow: true,
     showVehicleArrow: true,
     showBaseStationArrow: true,
-    meshOpacity: 1,
+    meshOpacity: defaultMeshOpacity,
   }
   widget.value.options = { ...defaultOptions, ...widget.value.options }
   if (isFlightVisible.value) targetFollower.enableAutoUpdate()
