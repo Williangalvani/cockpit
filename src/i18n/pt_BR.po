@@ -5427,6 +5427,10 @@ msgstr "Ocultar ações aplicadas"
 msgid "Hide applied mappings"
 msgstr "Ocultar mapeamentos aplicados"
 
+#: src/components/map/MeshTransparencyRange.vue
+msgid "Hide below"
+msgstr ""
+
 #: src/components/sources/GnssDeviceDialog.vue
 msgid "Hide console"
 msgstr "Ocultar console"
@@ -6789,6 +6793,10 @@ msgstr "Limite médio (V)"
 msgid "Menu"
 msgstr "Menu"
 
+#: src/components/widgets/Map.vue
+msgid "Mesh layers"
+msgstr ""
+
 #: src/views/ConfigurationMAVLinkView.vue
 msgid "Message"
 msgstr "Mensagem"
@@ -7911,6 +7919,10 @@ msgstr "Ops, parece que um trecho do vídeo não pôde ser salvo. Tentando novam
 #: src/views/ConfigurationUIView.vue
 msgid "Opacity"
 msgstr "Opacidade"
+
+#: src/components/map/MeshTransparencyRange.vue
+msgid "Opaque above"
+msgstr ""
 
 #: src/composables/appUpdater.ts
 msgid "Open"
@@ -11360,6 +11372,10 @@ msgid ""
 msgstr ""
 "Funções de transformação, widgets DIY e salvar ou executar ações, o que "
 "pode comandar o veículo"
+
+#: src/components/map/MeshTransparencyRange.vue
+msgid "Transparency"
+msgstr ""
 
 #: src/components/VideoPlayerStatsForNerds.vue
 msgid "Transport"
