@@ -427,7 +427,7 @@ export const buildFreshSimulatorViewsGroupFromDefault = (
     component: WidgetType.MiniMap,
     position: { x: 0.008, y: 0.06 },
     size: { width: 0.18, height: 0.32 },
-    options: { tileProvider: mapTileProviderId, zoom: 20 },
+    options: { tileProvider: mapTileProviderId, zoom: 20, showMapOverlays: true },
   }
   const keyboardGuide: Widget = {
     hash: uuid4(),
