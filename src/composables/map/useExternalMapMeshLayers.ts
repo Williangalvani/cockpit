@@ -40,6 +40,10 @@ export interface UseExternalMapMeshLayersReturn {
    */
   setMeshOpacity: (opacity: number) => void
   /**
+   * Shows or hides the meshes on this map, before or after `init`, leaving the other layers drawn.
+   */
+  setMeshesShown: (shown: boolean) => void
+  /**
    * Removes the meshes from the map.
    */
   destroy: () => void
@@ -55,6 +59,7 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
 
   let meshLayer: ExternalMapMeshesLayer | undefined
   let meshOpacity = defaultMeshOpacity
+  let meshesShown = true
   let mapRef: LeafletMap | undefined
   let unmounted = false
   if (getCurrentScope()) onScopeDispose(() => (unmounted = true))
@@ -72,12 +77,20 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
       pane: MESH_PANE,
     })
     meshLayer.setMapAlpha(meshOpacity)
-    map.addLayer(meshLayer)
+    if (meshesShown) map.addLayer(meshLayer)
   }
 
   const setMeshOpacity = (opacity: number): void => {
     meshOpacity = opacity
     meshLayer?.setMapAlpha(opacity)
+  }
+
+  // The uploaded meshes belong to the shared renderer, so re-adding the layer only redraws them.
+  const setMeshesShown = (shown: boolean): void => {
+    meshesShown = shown
+    if (!meshLayer || !mapRef) return
+    if (shown) mapRef.addLayer(meshLayer)
+    else mapRef.removeLayer(meshLayer)
   }
 
   const destroy = (): void => {
@@ -86,5 +99,5 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
     mapRef = undefined
   }
 
-  return { init, setMeshOpacity, destroy }
+  return { init, setMeshOpacity, setMeshesShown, destroy }
 }
