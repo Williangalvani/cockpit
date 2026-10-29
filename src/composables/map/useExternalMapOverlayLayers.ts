@@ -23,6 +23,11 @@ const reportUndrawableMesh = (mesh: MapMesh): void => {
 // Live senders can update many times a second; redrawing more often than this only costs frames.
 const syncIntervalMs = 250
 
+/**
+ * Mesh opacity the Map and MiniMap widgets start with, so a mesh does not hide the map under it.
+ */
+export const defaultMeshOpacity = 0.5
+
 const markerRadiusBySize: Record<string, number> = { small: 3, medium: 5, large: 7 }
 
 const stringProperty = (value: unknown, fallback: string): string => (typeof value === 'string' ? value : fallback)
