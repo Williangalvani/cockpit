@@ -135,10 +135,12 @@ export const useCustomTileProviders = (): UseCustomTileProvidersReturn => {
     if (!id || !mapRef) return
     const entry = entries.get(id)
     if (!entry) return
+    // Added before the built-in layer is removed: Leaflet clamps the zoom to the deepest layer left on the map, which
+    // in between would only be overlays like Seamarks (zoom 18), losing the restored zoom.
+    if (!mapRef.hasLayer(entry.layer)) entry.layer.addTo(mapRef)
     builtInBaseLayersRef.forEach((layer) => {
       if (mapRef?.hasLayer(layer)) mapRef.removeLayer(layer)
     })
-    if (!mapRef.hasLayer(entry.layer)) entry.layer.addTo(mapRef)
   }
 
   const init = (
