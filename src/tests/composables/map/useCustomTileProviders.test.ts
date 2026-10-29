@@ -9,7 +9,7 @@ const reef: CustomTileProviderMeta = {
   name: 'BlueSim reef',
   type: 'url',
   createdAt: 0,
-  maxZoom: 22,
+  maxZoom: 21,
   urlTemplate: 'bluesim/tiles/reef/{z}/{x}/{y}.jpg',
 } as CustomTileProviderMeta
 

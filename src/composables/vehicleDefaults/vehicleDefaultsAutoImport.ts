@@ -16,6 +16,7 @@ import { useControllerStore } from '@/stores/controller'
 import { useMainVehicleStore } from '@/stores/mainVehicle'
 import { useMissionStore } from '@/stores/mission'
 import { useWidgetManagerStore } from '@/stores/widgetManager'
+import { bluesimReefTileSource } from '@/utils/custom-tile-providers-migration'
 
 /**
  * Single source for the per-vehicle "the user already handled the defaults walkthrough" flag.
@@ -30,8 +31,7 @@ const sitlVehicleTypes: Record<string, MavType> = { ardusub: MavType.MAV_TYPE_SU
 // BlueSim ships top-down tiles of the level the Simulator widget starts by default, the reef
 const simulatorTileProviderInput = {
   name: 'BlueSim reef',
-  urlTemplate: 'bluesim/tiles/reef/{z}/{x}/{y}.jpg',
-  maxZoom: 22,
+  ...bluesimReefTileSource,
   attribution: 'BlueSim',
 }
 
