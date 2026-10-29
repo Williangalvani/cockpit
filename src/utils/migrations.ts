@@ -5,6 +5,7 @@ import { recordedDataLakeVariablesKey } from '@/libs/data-lake-logging'
 import { shareHardwareDetailsKey } from '@/libs/external-telemetry/event-tracking'
 import { settingsManager } from '@/libs/settings-management'
 import { getUnindentedString } from '@/libs/utils'
+import { type Profile, WidgetType } from '@/types/widgets'
 import { collectOverlayRecordedVariableIds } from '@/utils/data-lake-recorded-variables-migration'
 
 // Tracks which one-off migrations have already run, keyed by migration name.
@@ -164,6 +165,31 @@ const migrateCameraSpeedFactorRemoval = (): void => {
 }
 
 /**
+ * Turn the simulated Ping360 sonar on in Simulator widgets saved while it was off by default. Runs once, so a user who
+ * turns it off afterwards keeps it off.
+ *
+ * The stored layout is changed in place so the widget store, created before the write lands, already reads it, and the
+ * write keeps its epoch so a newer copy on the vehicle still wins.
+ */
+const migrateSimulatorPing360On = (): void => {
+  const migrationName = 'simulator-ping360-on'
+  if (hasMigrationRun(migrationName)) return
+
+  const viewsGroupKey = 'cockpit-views-group-v1'
+  const { currentUsername, currentVehicleId } = settingsManager
+  const stored = settingsManager.getLocalSettings()[currentUsername]?.[currentVehicleId]?.[viewsGroupKey]
+  const simulators = ((stored?.value as Profile | undefined)?.views ?? [])
+    .flatMap((view) => view.widgets ?? [])
+    .filter((widget) => widget.component === WidgetType.Simulator && widget.options?.ping360 !== true)
+  if (stored && simulators.length > 0) {
+    simulators.forEach((simulator) => (simulator.options = { ...simulator.options, ping360: true }))
+    settingsManager.setKeyValue(viewsGroupKey, stored.value, stored.epochLastChangedLocally)
+  }
+
+  markMigrationAsRun(migrationName)
+}
+
+/**
  * Drop the user list left behind by the mission control panel widget migration, which no longer exists.
  */
 const removeMissionControlPanelMigrationUserList = (): void => {
@@ -178,5 +204,6 @@ export function runMigrations(): void {
   migrateLegacyTelemetryOptOutToHardwareSharing()
   migrateRecordedVariablesFromOverlay()
   migrateCameraSpeedFactorRemoval()
+  migrateSimulatorPing360On()
   removeMissionControlPanelMigrationUserList()
 }
