@@ -13115,10 +13115,12 @@ msgstr "rede local"
 
 #: src/views/ConfigurationGeneralView.vue
 msgid ""
-"manage it. Arrays are the base64 of their little-endian bytes. The fields, "
-"how quads are drawn and how to replay a mesh are documented on the matching "
-"helpers of the Cockpit widget API. Every sender shares the same ids, so "
-"prefix them with your software's name."
+"manage it. Arrays are the base64 of their little-endian bytes. Each map's "
+"mesh opacity setting fades low-alpha texels, so give the lowest alphas to "
+"readings the user should be able to hide. The fields, how quads are drawn "
+"and how to replay a mesh are documented on the matching helpers of the "
+"Cockpit widget API. Every sender shares the same ids, so prefix them with "
+"your software's name."
 msgstr ""
 
 #: src/components/geofence/GeoFenceEditor.vue
