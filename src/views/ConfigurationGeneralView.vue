@@ -465,7 +465,11 @@
                   to cover a pixel is drawn as it is and each later one mixes into it with 60% weight, transparent
                   texels included, so repeated identical readings draw as one; a quad's color is its texel's (or, for
                   r8, its palette entry's) straight-alpha RGBA times its tint, and the mesh opacity fades the whole mesh
-                  once. <span class="font-mono">cockpit:removeMapMeshQuads</span>,
+                  once. Each map also has a mesh opacity setting o, 50% by default: a texel of zero alpha is never
+                  drawn, and one of alpha a &gt; 0 is drawn with alpha a² + o·(1 − a²), which is a² at o = 0 and opaque
+                  at o = 1. Give the lowest alphas to readings the user should be able to hide or show completely, such
+                  as silence, and full alpha to whatever should always show.
+                  <span class="font-mono">cockpit:removeMapMeshQuads</span>,
                   <span class="font-mono">cockpit:clearMapMesh</span>,
                   <span class="font-mono">cockpit:setMapMeshPalette</span> and
                   <span class="font-mono">cockpit:removeMapMesh</span> manage it. Every sender shares the same ids, so
