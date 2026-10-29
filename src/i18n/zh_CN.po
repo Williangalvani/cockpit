@@ -5096,6 +5096,10 @@ msgid "Hide map overlays"
 msgstr "隐藏地图叠加层"
 
 #: src/components/widgets/MiniMap.vue
+msgid "Hide mesh layers"
+msgstr ""
+
+#: src/components/widgets/MiniMap.vue
 msgid "Hide mission"
 msgstr "隐藏任务"
 
@@ -6361,6 +6365,7 @@ msgid "Menu"
 msgstr "菜单"
 
 #: src/components/widgets/Map.vue
+#: src/components/widgets/MiniMap.vue
 msgid "Mesh layers"
 msgstr ""
 
@@ -9203,6 +9208,10 @@ msgstr "显示旧版/内部键"
 #: src/components/widgets/MiniMap.vue
 msgid "Show map overlays"
 msgstr "显示地图叠加层"
+
+#: src/components/widgets/MiniMap.vue
+msgid "Show mesh layers"
+msgstr ""
 
 #: src/components/widgets/MiniMap.vue
 msgid "Show mission"
