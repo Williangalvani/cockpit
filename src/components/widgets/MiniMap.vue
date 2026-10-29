@@ -145,6 +145,28 @@
           hide-details
           @update:model-value="onShowMapOverlaysToggled"
         />
+        <v-switch
+          v-model="widget.options.showMeshLayers"
+          :label="t`Mesh layers`"
+          :color="widget.options.showMeshLayers ? 'white' : undefined"
+          hide-details
+          @update:model-value="onShowMeshLayersToggled"
+        />
+        <v-slider
+          v-if="widget.options.showMeshLayers"
+          v-model="widget.options.meshOpacity"
+          :label="t`Mesh opacity`"
+          color="white"
+          :min="0"
+          :max="1"
+          :step="0.05"
+          thumb-label
+          hide-details
+          class="mt-4 mb-2 w-[90%]"
+          @end="onMeshOpacityCommitted"
+        >
+          <template #thumb-label="{ modelValue }">{{ Math.round(modelValue * 100) }}%</template>
+        </v-slider>
 
         <v-divider class="opacity-10 mb-4" />
         <div class="mb-3">
@@ -194,7 +216,8 @@ import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, toRefs, watch
 
 import MapNorthIndicator from '@/components/map/MapNorthIndicator.vue'
 import PoiMapArrows from '@/components/poi/PoiMapArrows.vue'
-import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
+import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
+import { defaultMeshOpacity, useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useExternalMapOverlayLayers } from '@/composables/map/useExternalMapOverlayLayers'
 import { useHasAnyMapOverlay } from '@/composables/map/useExternalMapOverlays'
 import { useMapMissionLayer } from '@/composables/map/useMapMissionLayer'
@@ -249,6 +272,8 @@ const defaultOptions = {
   showMission: false,
   showVehiclePath: false,
   showMapOverlays: false,
+  showMeshLayers: true,
+  meshOpacity: defaultMeshOpacity,
   zoom: 18,
 }
 
@@ -379,6 +404,9 @@ const hasMapOverlays = useHasAnyMapOverlay()
 
 // Draws the meshes external software sent onto this map, which the GeoTIFF option above does not gate.
 const externalMeshLayers = useExternalMapMeshLayers()
+const { meshCount: externalMeshCount } = useExternalMapMeshes()
+watch(() => widget.value.options.meshOpacity, externalMeshLayers.setMeshOpacity, { immediate: true })
+watch(() => widget.value.options.showMeshLayers, externalMeshLayers.setMeshesShown, { immediate: true })
 
 const bindMapOverlays = (): void => {
   if (!map.value) return
@@ -445,6 +473,11 @@ const toggleShowMapOverlays = (): void => {
   logUserAction(`${widget.value.options.showMapOverlays ? 'Showed' : 'Hid'} the map overlays on the MiniMap`)
 }
 
+const toggleShowMeshLayers = (): void => {
+  widget.value.options.showMeshLayers = !widget.value.options.showMeshLayers
+  logUserAction(`${widget.value.options.showMeshLayers ? 'Showed' : 'Hid'} the mesh layers on the MiniMap`)
+}
+
 const toggleShowNorthIndicator = (): void => {
   widget.value.options.showNorthIndicator = !widget.value.options.showNorthIndicator
   logUserAction(`${widget.value.options.showNorthIndicator ? 'Showed' : 'Hid'} the MiniMap north indicator`)
@@ -477,6 +510,13 @@ const menuItems = computed<ContextMenuItem[]>(() => {
       item: widget.value.options.showMapOverlays ? t`Hide map overlays` : t`Show map overlays`,
       icon: 'mdi-image-multiple',
       action: toggleShowMapOverlays,
+    })
+  }
+  if (externalMeshCount.value > 0) {
+    items.push({
+      item: widget.value.options.showMeshLayers ? t`Hide mesh layers` : t`Show mesh layers`,
+      icon: 'mdi-layers',
+      action: toggleShowMeshLayers,
     })
   }
   items.push(
@@ -517,6 +557,10 @@ const onEdgeFadeCommitted = (value: number): void => {
   logUserAction(`Set MiniMap edge fade to ${value}`)
 }
 
+const onMeshOpacityCommitted = (value: number): void => {
+  logUserAction(`Set MiniMap mesh opacity to ${Math.round(value * 100)}%`)
+}
+
 const onHeadingUpToggled = (value: boolean | null): void => {
   logUserAction(`${value ? 'Enabled' : 'Disabled'} MiniMap heading-up rotation`)
 }
@@ -539,6 +583,10 @@ const onShowNorthIndicatorToggled = (value: boolean | null): void => {
 
 const onShowMapOverlaysToggled = (value: boolean | null): void => {
   logUserAction(`${value ? 'Enabled' : 'Disabled'} MiniMap map overlays`)
+}
+
+const onShowMeshLayersToggled = (value: boolean | null): void => {
+  logUserAction(`${value ? 'Enabled' : 'Disabled'} MiniMap mesh layers`)
 }
 
 const poiSelectItems = computed(() => dynamicPois.value.map((poi) => ({ title: poi.name, value: poi.id })))
