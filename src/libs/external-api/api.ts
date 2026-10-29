@@ -327,10 +327,13 @@ export function setMapMesh(mesh: ExternalMapMesh, options?: MapMeshRequestOption
  * readings all but replace it. With `filter: 'linear'`, r8 indices are interpolated before the palette lookup, so an
  * edge between index 0 and data samples the entries in between, and rgba8 straight colors are interpolated before
  * premultiplying, so a transparent texel's color bleeds into its neighbor's edge: give transparent texels their
- * neighbors' color, or use `'nearest'`, to avoid a dark fringe. The mesh's opacity fades the result once. The typed
- * arrays' whole buffers are transferred to Cockpit, even where an array views only part of one, so they are empty here
- * afterwards (`byteLength` 0), and sending one of them again throws a `DataCloneError`: build new arrays for every
- * send. Arrays over a `SharedArrayBuffer` are not transferred but shared, so they keep their bytes here.
+ * neighbors' color, or use `'nearest'`, to avoid a dark fringe. The mesh's opacity fades the result once. Each map also
+ * has a mesh opacity setting o: a texel of zero alpha is never drawn, and one of alpha a > 0 is drawn with alpha a² +
+ * o·(1 − a²), which is a² at o = 0 and opaque at o = 1. Give the lowest alphas to readings the user should be able to
+ * hide or show completely, such as silence, and full alpha to whatever should always show. The typed arrays' whole
+ * buffers are transferred to Cockpit, even where an array views only part of one, so they are empty here afterwards
+ * (`byteLength` 0), and sending one of them again throws a `DataCloneError`: build new arrays for every send. Arrays
+ * over a `SharedArrayBuffer` are not transferred but shared, so they keep their bytes here.
  *
  * The write is sent without waiting for an answer, so it suits streaming: a refused one only warns in Cockpit's logs.
  * Pass `{ confirm: true }` to get a promise of Cockpit's answer instead.

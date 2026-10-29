@@ -416,7 +416,7 @@
                   <span class="font-mono">cockpit:clearMapMesh</span> {{ t`and` }}
                   <span class="font-mono">cockpit:removeMapMesh</span>
                   {{
-                    t`manage it. Arrays are the base64 of their little-endian bytes. The fields, how quads are drawn and how to replay a mesh are documented on the matching helpers of the Cockpit widget API. Every sender shares the same ids, so prefix them with your software's name.`
+                    t`manage it. Arrays are the base64 of their little-endian bytes. Each map's mesh opacity setting fades low-alpha texels, so give the lowest alphas to readings the user should be able to hide. The fields, how quads are drawn and how to replay a mesh are documented on the matching helpers of the Cockpit widget API. Every sender shares the same ids, so prefix them with your software's name.`
                   }}
                 </li>
                 <li>

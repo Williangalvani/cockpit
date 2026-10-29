@@ -20,6 +20,12 @@ const reportUndrawableMesh = (mesh: MapMesh): void => {
 }
 
 /**
+ * Mesh opacity every map starts with: the faintest texels are drawn at about half opacity, so the map shows through
+ * them, while opaque texels keep full contrast.
+ */
+export const defaultMeshOpacity = 0.5
+
+/**
  * Return type of {@link useExternalMapMeshLayers}.
  */
 export interface UseExternalMapMeshLayersReturn {
@@ -27,6 +33,15 @@ export interface UseExternalMapMeshLayersReturn {
    * Draws the received meshes on a Leaflet map, while `isShown` says the map is.
    */
   init: (map: LeafletMap, isShown?: () => boolean) => void
+  /**
+   * Sets, before or after `init`, how this map draws its meshes' faint texels, from 0 (faintest hidden) to 1 (every
+   * non-empty texel opaque).
+   */
+  setMeshOpacity: (opacity: number) => void
+  /**
+   * Shows or hides the meshes on this map, before or after `init`, leaving the other layers drawn.
+   */
+  setMeshesShown: (shown: boolean) => void
   /**
    * Removes the meshes from the map.
    */
@@ -42,6 +57,8 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
   const { meshes } = useExternalMapMeshes()
 
   let meshLayer: ExternalMapMeshesLayer | undefined
+  let meshOpacity = defaultMeshOpacity
+  let meshesShown = true
   let mapRef: LeafletMap | undefined
 
   const init = (map: LeafletMap, isShown = (): boolean => true): void => {
@@ -55,7 +72,21 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
       onUnsupported: reportUndrawableMesh,
       pane: MESH_PANE,
     })
-    map.addLayer(meshLayer)
+    meshLayer.setMapAlpha(meshOpacity)
+    if (meshesShown) map.addLayer(meshLayer)
+  }
+
+  const setMeshOpacity = (opacity: number): void => {
+    meshOpacity = opacity
+    meshLayer?.setMapAlpha(opacity)
+  }
+
+  // The uploaded meshes belong to the shared renderer, so re-adding the layer only redraws them.
+  const setMeshesShown = (shown: boolean): void => {
+    meshesShown = shown
+    if (!meshLayer || !mapRef) return
+    if (shown) mapRef.addLayer(meshLayer)
+    else mapRef.removeLayer(meshLayer)
   }
 
   const destroy = (): void => {
@@ -64,5 +95,5 @@ export const useExternalMapMeshLayers = (): UseExternalMapMeshLayersReturn => {
     mapRef = undefined
   }
 
-  return { init, destroy }
+  return { init, setMeshOpacity, setMeshesShown, destroy }
 }
