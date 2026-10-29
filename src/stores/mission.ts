@@ -46,6 +46,7 @@ import {
   WaypointCoordinates,
 } from '@/types/mission'
 import { cockpitLastConnectedUserKey, fallbackUsername } from '@/types/settings-management'
+import { migrateBluesimReefMaxZoom } from '@/utils/custom-tile-providers-migration'
 
 import { useMainVehicleStore } from './mainVehicle'
 
@@ -225,6 +226,16 @@ export const useMissionStore = defineStore('mission', () => {
   // Metadata for user-defined custom map tile providers. For `file` providers the tile archive lives on the
   // vehicle (File Browser) and is cached locally in IndexedDB, both keyed by each entry's `id`.
   const customTileProviders = useBlueOsStorage<CustomTileProviderMeta[]>('cockpit-custom-tile-providers-v1', [])
+
+  // Vehicle syncs and vehicle switches replace this list after boot, so migrate on every write
+  watch(
+    customTileProviders,
+    (providers) => {
+      const migrated = migrateBluesimReefMaxZoom(providers)
+      if (migrated !== providers) customTileProviders.value = migrated
+    },
+    { immediate: true, deep: true }
+  )
 
   const addCustomTileProvider = (provider: CustomTileProviderMeta): void => {
     customTileProviders.value.push(provider)
