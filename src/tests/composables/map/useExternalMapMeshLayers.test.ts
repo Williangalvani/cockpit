@@ -47,3 +47,56 @@ describe('useExternalMapMeshLayers mesh opacity', () => {
     layers.destroy()
   })
 })
+
+describe('useExternalMapMeshLayers mesh visibility', () => {
+  test('shows the meshes unless told otherwise', () => {
+    const layers = useExternalMapMeshLayers()
+    layers.init(map)
+    expect(meshCanvas()).toBeTruthy()
+    layers.destroy()
+  })
+
+  test('hides and shows the meshes after init, keeping their opacity', () => {
+    const layers = useExternalMapMeshLayers()
+    layers.setMeshOpacity(0.3)
+    layers.init(map)
+
+    layers.setMeshesShown(false)
+    expect(meshCanvas()).toBeNull()
+
+    layers.setMeshesShown(true)
+    expect(meshCanvas()?.style.opacity).toBe('0.3')
+    layers.destroy()
+  })
+
+  test('applies a hide set before init, across a destroy and a new init', () => {
+    const layers = useExternalMapMeshLayers()
+    layers.setMeshesShown(false)
+    layers.init(map)
+    expect(meshCanvas()).toBeNull()
+
+    layers.destroy()
+    layers.init(map)
+    expect(meshCanvas()).toBeNull()
+
+    layers.setMeshesShown(true)
+    expect(meshCanvas()).toBeTruthy()
+    layers.destroy()
+    expect(meshCanvas()).toBeNull()
+  })
+
+  test('leaves the other map layers drawn while the meshes are hidden', () => {
+    const geoTiff = L.imageOverlay('data:,', map.getBounds()).addTo(map)
+    const layers = useExternalMapMeshLayers()
+    layers.init(map)
+
+    layers.setMeshesShown(false)
+    expect(meshCanvas()).toBeNull()
+    expect(map.hasLayer(geoTiff)).toBe(true)
+
+    layers.setMeshesShown(true)
+    expect(meshCanvas()).toBeTruthy()
+    expect(map.hasLayer(geoTiff)).toBe(true)
+    layers.destroy()
+  })
+})
