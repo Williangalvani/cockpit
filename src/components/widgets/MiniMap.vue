@@ -99,6 +99,21 @@
           class="mt-4 mb-2 w-[90%]"
           @end="onEdgeFadeCommitted"
         />
+        <v-slider
+          v-if="externalMeshCount > 0"
+          v-model="widget.options.meshOpacity"
+          label="Mesh opacity"
+          color="white"
+          :min="0"
+          :max="1"
+          :step="0.05"
+          thumb-label
+          hide-details
+          class="mt-4 mb-2 w-[90%]"
+          @end="onMeshOpacityCommitted"
+        >
+          <template #thumb-label="{ modelValue }">{{ Math.round(modelValue * 100) }}%</template>
+        </v-slider>
 
         <v-switch
           v-model="widget.options.headingUp"
@@ -191,7 +206,8 @@ import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, toRefs, watch
 
 import MapNorthIndicator from '@/components/map/MapNorthIndicator.vue'
 import PoiMapArrows from '@/components/poi/PoiMapArrows.vue'
-import { useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
+import { useExternalMapMeshes } from '@/composables/map/useExternalMapMeshes'
+import { defaultMeshOpacity, useExternalMapMeshLayers } from '@/composables/map/useExternalMapMeshLayers'
 import { useMapMissionLayer } from '@/composables/map/useMapMissionLayer'
 import { useMapOverlays } from '@/composables/map/useMapOverlays'
 import { useMapPoiMarkers } from '@/composables/map/useMapPoiMarkers'
@@ -247,6 +263,7 @@ const defaultOptions = {
   showMission: false,
   showVehiclePath: false,
   showMapOverlays: false,
+  meshOpacity: defaultMeshOpacity,
   zoom: 18,
 }
 
@@ -376,6 +393,8 @@ const hasMapOverlays = computed(() => missionStore.mapOverlays.length > 0)
 
 // Draws the meshes external software sent onto this map, which the GeoTIFF option above does not gate.
 const externalMeshLayers = useExternalMapMeshLayers()
+const { meshCount: externalMeshCount } = useExternalMapMeshes()
+watch(() => widget.value.options.meshOpacity, externalMeshLayers.setMeshOpacity, { immediate: true })
 
 const bindMapOverlays = (): void => {
   if (!map.value) return
@@ -506,6 +525,10 @@ const onTileProviderSelected = (value: string | null): void => {
 
 const onEdgeFadeCommitted = (value: number): void => {
   logUserAction(`Set MiniMap edge fade to ${value}`)
+}
+
+const onMeshOpacityCommitted = (value: number): void => {
+  logUserAction(`Set MiniMap mesh opacity to ${Math.round(value * 100)}%`)
 }
 
 const onHeadingUpToggled = (value: boolean | null): void => {
