@@ -53,7 +53,8 @@ const intersects = (a: MercatorBounds, b: MercatorBounds): boolean =>
 /**
  * Leaflet layer drawing the map meshes of a {@link MapMeshStore} on one canvas, padded past the view. Every draw
  * is a full redraw, made when the meshes change in view (once per frame), when a pan leaves the padding, when the
- * zoom or size changes, and when the map becomes shown. Zooms scale the last drawing until they end.
+ * zoom or size changes, when the map's mesh alpha changes, and when the map becomes shown. Zooms scale the last
+ * drawing until they end.
  */
 export class ExternalMapMeshesLayer extends L.Layer {
   private canvas?: HTMLCanvasElement
@@ -68,6 +69,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
   private drawnOrigin?: L.LatLng
   private drawnZoom = 0
   private drawnBounds?: MercatorBounds
+  private mapAlpha = 1
 
   /**
    * @param {ExternalMapMeshesLayerOptions} config - What to draw, and with what
@@ -126,6 +128,18 @@ export class ExternalMapMeshesLayer extends L.Layer {
       // A zoom in progress scales the last drawing instead, and its end draws again.
       if (!this.zooming && this.shown) this.draw()
     })
+  }
+
+  /**
+   * Sets this map's low-alpha fade, which the renderer applies before each mesh's own opacity, and redraws on the next
+   * frame
+   * @param {number} alpha - From 0 to 1; anything else is clamped, and not a number is 1
+   */
+  setMapAlpha(alpha: number): void {
+    const clamped = Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1
+    if (clamped === this.mapAlpha) return
+    this.mapAlpha = clamped
+    this.redraw()
   }
 
   /* eslint-disable jsdoc/require-jsdoc -- private helpers, commented where they need it. */
@@ -240,7 +254,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
     context.clearRect(0, 0, width, height)
     const view = { width, height, originX, originY, metresPerPixel: metresPerCssPixel / pixelRatio }
     for (const mesh of meshes) {
-      if (!renderer.render(mesh, view)) continue
+      if (!renderer.render(mesh, view, this.mapAlpha)) continue
       context.globalAlpha = mesh.opacity
       const source = renderer.canvas
       context.drawImage(source, 0, source.height - height, width, height, 0, 0, width, height)
