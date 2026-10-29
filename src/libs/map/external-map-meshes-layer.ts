@@ -50,8 +50,8 @@ const intersects = (a: MercatorBounds, b: MercatorBounds): boolean =>
 /**
  * Leaflet layer drawing the map meshes of a {@link MapMeshStore} on one canvas, padded past the view. Every draw
  * is a full redraw, made when the meshes change in view (once per frame), when a pan leaves the padding, when the
- * zoom or size changes, when the map's mesh alpha changes, and when the map becomes shown. Zooms scale the last
- * drawing until they end.
+ * zoom or size changes, when the map's mesh alpha turns to or from 0, and when the map becomes shown. Zooms scale
+ * the last drawing until they end.
  */
 export class ExternalMapMeshesLayer extends L.Layer {
   private canvas?: HTMLCanvasElement
@@ -89,6 +89,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
     this.leafletMap = map
     this.canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated')
     this.canvas.style.pointerEvents = 'none'
+    this.styleMapAlpha()
     map.getPane(this.config.pane)?.appendChild(this.canvas)
     this.stopListening = this.config.store.subscribe((change) => this.onChange(change))
     mapMeshStats.maps[this.statsId] = this.stats
@@ -135,18 +136,26 @@ export class ExternalMapMeshesLayer extends L.Layer {
   }
 
   /**
-   * Scales the alpha of every mesh this map draws, on top of each mesh's own opacity, redrawing on the next frame
+   * Scales the alpha of this map's finished mesh drawing as a whole, on top of each mesh's own opacity, so meshes
+   * and quads that overlap do not compound it. Only turning it to or from 0 redraws, on the next frame.
    * @param {number} alpha - From 0, which draws no meshes, to 1; anything else is clamped, and not a number is 1
    */
   setMapAlpha(alpha: number): void {
     const clamped = Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1
     if (clamped === this.mapAlpha) return
+    const wasDrawing = this.mapAlpha > 0
     this.mapAlpha = clamped
     this.stats.mapAlpha = clamped
-    this.redraw()
+    this.styleMapAlpha()
+    if (wasDrawing !== clamped > 0) this.redraw()
   }
 
   /* eslint-disable jsdoc/require-jsdoc -- private helpers, commented where they need it. */
+  // Applied by the compositor to the canvas, so changing it neither redraws nor re-uploads anything.
+  private styleMapAlpha(): void {
+    if (this.canvas) this.canvas.style.opacity = this.mapAlpha < 1 ? String(this.mapAlpha) : ''
+  }
+
   private updateShown(): void {
     const shown = this.config.isShown()
     if (shown === this.shown) return
@@ -261,7 +270,7 @@ export class ExternalMapMeshesLayer extends L.Layer {
     context.clearRect(0, 0, width, height)
     const view = { width, height, originX, originY, metresPerPixel: metresPerCssPixel / pixelRatio }
     for (const mesh of meshes) {
-      if (!renderer.render(mesh, view, this.mapAlpha)) continue
+      if (!renderer.render(mesh, view)) continue
       context.globalAlpha = mesh.opacity
       const source = renderer.canvas
       context.drawImage(source, 0, source.height - height, width, height, 0, 0, width, height)
