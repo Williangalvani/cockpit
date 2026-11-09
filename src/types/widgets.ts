@@ -948,6 +948,7 @@ export const widgetKeepsInputInEditMode: Record<WidgetType, boolean> = {
   [WidgetType.MiniMap]: false,
   [WidgetType.MiniWidgetsBar]: true,
   [WidgetType.Plotter]: false,
+  [WidgetType.Simulator]: false,
   [WidgetType.URLVideoPlayer]: false,
   [WidgetType.VideoPlayer]: false,
   [WidgetType.VirtualHorizon]: false,
