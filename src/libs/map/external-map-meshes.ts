@@ -443,6 +443,22 @@ export const mapMeshBudgetBytes = (stored: string | null): number => {
   return Number.isSafeInteger(bytes) ? bytes : defaultMapMeshBudgetBytes
 }
 
+const maxMapMeshBudgetMiB = Math.floor(Number.MAX_SAFE_INTEGER / bytesPerMiB)
+// Plain decimals only, so a string such as '1e3' or '0x10' is not read as some other number of MiB.
+const plainDecimal = /^\s*-?\d+(\.\d+)?\s*$/
+
+/**
+ * Converts a budget typed in whole MiB into the bytes it is stored as
+ * @param {number | string} mib - The budget in MiB, as typed
+ * @returns {number | string} The bytes, or why the value cannot be a budget
+ */
+export const mapMeshBudgetFromMiB = (mib: number | string): number | string => {
+  const value = typeof mib === 'number' || plainDecimal.test(String(mib)) ? Number(mib) : NaN
+  if (!Number.isInteger(value)) return 'Must be a whole number of MiB.'
+  if (value <= 0) return 'Must be more than zero.'
+  return value <= maxMapMeshBudgetMiB ? value * bytesPerMiB : `Must be at most ${maxMapMeshBudgetMiB} MiB.`
+}
+
 /**
  * Error for a mesh definition that would push the total reserved by all meshes past the budget
  */
