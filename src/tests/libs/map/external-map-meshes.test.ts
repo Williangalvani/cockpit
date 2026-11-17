@@ -12,6 +12,7 @@ import {
   latToMercatorY,
   lonToMercatorX,
   MapMeshBudgetError,
+  mapMeshBudgetFromMiB,
   mapMeshReservedBytes,
   MapMeshStore,
   meshDrawRanges,
@@ -678,6 +679,22 @@ describe('MapMeshStore memory budget', () => {
         mapMeshReservedBytes(capacity, { format, width, height })
       )
     }
+  })
+
+  it('reads a budget typed in whole MiB as bytes, or says why it cannot be one', () => {
+    for (const notWhole of [NaN, Infinity, -Infinity, '', ' ', 'abc', 1.5, '217.95', 1e-7]) {
+      expect(mapMeshBudgetFromMiB(notWhole), String(notWhole)).toBe('Must be a whole number of MiB.')
+    }
+    for (const notPositive of [0, -0, -1, '-5']) {
+      expect(mapMeshBudgetFromMiB(notPositive), String(notPositive)).toBe('Must be more than zero.')
+    }
+    for (const tooLarge of [8_589_934_592, 1e300, Number.MAX_VALUE]) {
+      expect(mapMeshBudgetFromMiB(tooLarge), String(tooLarge)).toBe('Must be at most 8589934591 MiB.')
+    }
+    expect(mapMeshBudgetFromMiB(218)).toBe(defaultMapMeshBudgetBytes)
+    expect(mapMeshBudgetFromMiB('100')).toBe(104_857_600)
+    expect(mapMeshBudgetFromMiB(8_589_934_591)).toBe(8_589_934_591 * 1024 * 1024)
+    expect(Number.isSafeInteger(mapMeshBudgetFromMiB(8_589_934_591))).toBe(true)
   })
 
   it('overwrites the oldest of a full ring without allocating past what it reserved', () => {
