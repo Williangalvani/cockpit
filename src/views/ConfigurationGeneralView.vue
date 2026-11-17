@@ -487,7 +487,9 @@
                   reloaded Cockpit has none, while after a dropped connection they stay as they were, without what was
                   sent in between, and no mesh is removed when a connection closes. So, on every connection, ask for the
                   capabilities and set the mesh; then either clear it and replay the quads to show, oldest first, with
-                  explicit slots (regardless of your slot numbering), or resend every write and removal it missed.
+                  explicit slots (regardless of your slot numbering), or resend every write and removal it missed. A
+                  mesh reserves its whole capacity when set, and one that would exceed the map mesh memory limit below
+                  is refused with <span class="font-mono">code: 'budget'</span>.
                 </li>
                 <li>
                   You can use data-lake variables to compose the URL, for example:
@@ -508,6 +510,59 @@
               @add="addGenericWebSocket"
               @remove="removeGenericWebSocket"
             />
+          </template>
+        </ExpansiblePanel>
+        <ExpansiblePanel :is-expanded="!interfaceStore.isOnPhoneScreen">
+          <template #title>Map mesh memory limit</template>
+          <template #info>
+            <p class="w-full">
+              The maximum memory that map meshes sent by external software may reserve, together, on this computer. A
+              mesh reserves its whole capacity when it is created, and one that would go past this limit is refused.
+              Drawn meshes take about as much again on the graphics card. Lowering the limit removes no mesh: it only
+              refuses new or larger ones. The default, about {{ defaultMapMeshBudgetMiB }} MiB, holds 16 Ping360 sonar
+              meshes with 225 s of history each. This setting stays on this computer and is not synced with the vehicle.
+            </p>
+          </template>
+          <template #content>
+            <v-form
+              ref="mapMeshBudgetForm"
+              v-model="mapMeshBudgetFormValid"
+              class="w-full mt-2 pb-2"
+              @submit.prevent="setMapMeshBudget"
+            >
+              <div class="flex items-start gap-2">
+                <v-text-field
+                  v-model.number="newMapMeshBudgetMiB"
+                  variant="filled"
+                  type="number"
+                  density="compact"
+                  theme="dark"
+                  class="flex-1"
+                  suffix="MiB"
+                  :rules="[isValidMapMeshBudget]"
+                >
+                  <template #append-inner>
+                    <v-btn
+                      v-tooltip.bottom="'Reset to default'"
+                      icon="mdi-restore"
+                      variant="text"
+                      size="x-small"
+                      aria-label="Reset to default"
+                      @click="resetMapMeshBudget"
+                    />
+                  </template>
+                </v-text-field>
+                <v-btn
+                  :size="interfaceStore.isOnSmallScreen ? 'small' : 'default'"
+                  :disabled="!mapMeshBudgetFormValid"
+                  class="bg-transparent mt-1"
+                  variant="text"
+                  type="submit"
+                >
+                  Apply
+                </v-btn>
+              </div>
+            </v-form>
           </template>
         </ExpansiblePanel>
         <McpSettings />
@@ -618,7 +673,7 @@
 </template>
 
 <script setup lang="ts">
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useStorage } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { defaultGlobalAddress } from '@/assets/defaults'
@@ -628,6 +683,7 @@ import McpSettings from '@/components/configuration/McpSettings.vue'
 import ExpansiblePanel from '@/components/ExpansiblePanel.vue'
 import VehicleDiscoveryDialog from '@/components/VehicleDiscoveryDialog.vue'
 import { useInteractionDialog } from '@/composables/interactionDialog'
+import { mapMeshBudgetKey } from '@/composables/map/useExternalMapMeshes'
 import {
   addSecondaryVehicle,
   canPlaceSecondaryVehiclesOnMap,
@@ -649,6 +705,14 @@ import {
   removeGenericWebSocketConnection,
 } from '@/libs/generic-websocket'
 import { externalMapMeshLimits } from '@/libs/map/external-map-mesh-api'
+import {
+  defaultMapMeshBudgetBytes,
+  mapMeshBudgetBytes,
+  mapMeshBudgetChange,
+  mapMeshBudgetChangeMessage,
+  mapMeshBudgetFromMiB,
+  mapMeshBudgetToMiB,
+} from '@/libs/map/external-map-meshes'
 import { isElectron, isValidNetworkAddress } from '@/libs/utils'
 import { replaceDataLakeInputsInString } from '@/libs/utils-data-lake'
 import { reloadCockpitAndWarnUser } from '@/libs/utils-vue'
@@ -975,6 +1039,40 @@ const resetWatchdogTimeout = (): void => {
   logUserAction('Reset reconnection watchdog timeout to default')
   newVehicleConnectionWatchdogTimeoutSeconds.value = defaultVehicleConnectionWatchdogTimeoutSeconds
   mainVehicleStore.vehicleConnectionWatchdogTimeoutMs = defaultVehicleConnectionWatchdogTimeoutSeconds * 1000
+}
+
+/** Map mesh memory limit */
+
+const defaultMapMeshBudgetMiB = Math.round(mapMeshBudgetToMiB(defaultMapMeshBudgetBytes))
+const storedMapMeshBudget = useStorage<string | null>(mapMeshBudgetKey, null)
+const mapMeshBudgetMiB = computed(() => mapMeshBudgetToMiB(mapMeshBudgetBytes(storedMapMeshBudget.value)))
+
+const mapMeshBudgetForm = ref()
+const mapMeshBudgetFormValid = ref(true)
+const newMapMeshBudgetMiB = ref<number>(mapMeshBudgetMiB.value)
+
+watch(mapMeshBudgetMiB, (value) => (newMapMeshBudgetMiB.value = value))
+
+const isValidMapMeshBudget = (value: number | string): boolean | string => {
+  const bytes = mapMeshBudgetFromMiB(value)
+  return typeof bytes === 'number' || bytes
+}
+
+const setMapMeshBudget = async (): Promise<void> => {
+  const validation = await mapMeshBudgetForm.value.validate()
+  const change = mapMeshBudgetChange(newMapMeshBudgetMiB.value, storedMapMeshBudget.value)
+  if (!validation.valid || typeof change === 'string') return
+
+  logUserAction(`Set the map mesh memory limit to ${change.bytes} bytes`)
+  storedMapMeshBudget.value = change.stored
+  const variant = change.direction === 'unchanged' ? 'info' : 'success'
+  openSnackbar({ message: mapMeshBudgetChangeMessage(change), variant })
+}
+
+const resetMapMeshBudget = (): void => {
+  logUserAction('Reset the map mesh memory limit to default')
+  storedMapMeshBudget.value = null
+  newMapMeshBudgetMiB.value = mapMeshBudgetToMiB(defaultMapMeshBudgetBytes)
 }
 
 const isValidHostAddress = (value: string): boolean | string => {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ValidatedMapMesh, ValidatedMapMeshQuads } from '@/libs/map/external-map-mesh-api'
 import {
   type MapMesh,
+  type MapMeshBudgetChange,
   type MapMeshChange,
   type MapMeshPage,
   type MapMeshRenderer,
@@ -11,7 +12,11 @@ import {
   defaultMapMeshBudgetBytes,
   latToMercatorY,
   lonToMercatorX,
+  mapMeshBudgetChange,
+  mapMeshBudgetChangeMessage,
   MapMeshBudgetError,
+  mapMeshBudgetFromMiB,
+  mapMeshBudgetToMiB,
   mapMeshReservedBytes,
   MapMeshStore,
   meshDrawRanges,
@@ -712,6 +717,68 @@ describe('MapMeshStore memory budget', () => {
         mapMeshReservedBytes(capacity, { format, width, height })
       )
     }
+  })
+
+  it('reads a budget typed in MiB as whole bytes, or says why it cannot be one', () => {
+    expect(mapMeshBudgetFromMiB).toBeTypeOf('function')
+    for (const notANumber of [NaN, Infinity, -Infinity, '', ' ', 'abc']) {
+      expect(mapMeshBudgetFromMiB(notANumber), String(notANumber)).toBe('Must be a number.')
+    }
+    for (const notPositive of [0, -0, -1, -Number.MAX_VALUE, 1e-7, 0.4 / 1024 / 1024]) {
+      expect(mapMeshBudgetFromMiB(notPositive), String(notPositive)).toBe('Must be more than zero.')
+    }
+    for (const tooLarge of [8_589_934_592, 1e300, Number.MAX_VALUE]) {
+      expect(mapMeshBudgetFromMiB(tooLarge), String(tooLarge)).toBe('Must be at most 8589934591 MiB.')
+    }
+    expect(mapMeshBudgetFromMiB(8_589_934_591.5)).toBe(9_007_199_254_216_704)
+    expect(mapMeshBudgetFromMiB(Number.MAX_SAFE_INTEGER / 1024 / 1024)).toBe(Number.MAX_SAFE_INTEGER)
+    expect(mapMeshBudgetFromMiB('8589934591.999999')).toBe(Number.MAX_SAFE_INTEGER)
+    expect(mapMeshBudgetFromMiB(1 / 1024 / 1024)).toBe(1)
+    expect(mapMeshBudgetFromMiB(0.6 / 1024 / 1024)).toBe(1)
+    expect(mapMeshBudgetFromMiB(defaultMapMeshBudgetBytes / 1024 / 1024)).toBe(defaultMapMeshBudgetBytes)
+    expect(mapMeshBudgetFromMiB(217.953125)).toBe(228_540_416)
+    expect(mapMeshBudgetFromMiB('100')).toBe(104_857_600)
+    expect(mapMeshBudgetFromMiB(8_589_934_591)).toBe(8_589_934_591 * 1024 * 1024)
+    expect(Number.isSafeInteger(mapMeshBudgetFromMiB(8_589_934_591))).toBe(true)
+  })
+
+  it('shows a budget in MiB to 2 decimals', () => {
+    expect(mapMeshBudgetToMiB(defaultMapMeshBudgetBytes)).toBe(217.95)
+    expect(mapMeshBudgetToMiB(20_000_000)).toBe(19.07)
+    expect(mapMeshBudgetToMiB(50 * 1024 * 1024)).toBe(50)
+    expect(mapMeshBudgetToMiB(Number.MAX_SAFE_INTEGER)).toBe(8_589_934_592)
+  })
+
+  it('applies the default as shown by storing no budget, so the setting follows a later default', () => {
+    const shown = mapMeshBudgetToMiB(defaultMapMeshBudgetBytes)
+    for (const stored of [null, '104857600']) {
+      expect(mapMeshBudgetChange(shown, stored), String(stored)).toMatchObject({
+        bytes: defaultMapMeshBudgetBytes,
+        stored: null,
+      })
+      expect(mapMeshBudgetChange(String(shown), stored)).toMatchObject({ stored: null })
+    }
+    expect(mapMeshBudgetChange(defaultMapMeshBudgetBytes / 1024 / 1024, null)).toMatchObject({ stored: null })
+    expect(mapMeshBudgetChange(100, null)).toMatchObject({ bytes: 104_857_600, stored: '104857600' })
+    // A stored budget shown rounded is applied as it is, not as the rounded value.
+    expect(mapMeshBudgetChange(19.07, '20000000')).toEqual({
+      bytes: 20_000_000,
+      stored: '20000000',
+      direction: 'unchanged',
+    })
+    expect(mapMeshBudgetChange(0, null)).toBe('Must be more than zero.')
+  })
+
+  it('says whether applying a budget raised, lowered or kept the limit', () => {
+    const message = (mib: number, stored: string | null): string =>
+      mapMeshBudgetChangeMessage(mapMeshBudgetChange(mib, stored) as MapMeshBudgetChange)
+    expect(message(300, null)).toBe('Map mesh memory limit raised to 300 MiB.')
+    expect(message(50, null)).toBe(
+      'Map mesh memory limit lowered to 50 MiB. Existing meshes are kept, even if they now exceed it.'
+    )
+    expect(message(217.95, null)).toBe('Map mesh memory limit unchanged at 217.95 MiB (the default).')
+    expect(message(217.95, '104857600')).toBe('Map mesh memory limit raised to 217.95 MiB (the default).')
+    expect(message(50, '52428800')).toBe('Map mesh memory limit unchanged at 50 MiB.')
   })
 
   it('keeps a survey vehicle of several sensors within the default budget, refusing the one sensor too many', () => {

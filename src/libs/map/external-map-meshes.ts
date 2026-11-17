@@ -446,6 +446,81 @@ export const mapMeshBudgetBytes = (stored: string | null): number => {
   return Number.isSafeInteger(bytes) ? bytes : defaultMapMeshBudgetBytes
 }
 
+const bytesPerMiB = 1024 * 1024
+const maxMapMeshBudgetMiB = Number.MAX_SAFE_INTEGER / bytesPerMiB
+
+/**
+ * A budget in MiB, rounded to the 2 decimals the settings show it with
+ * @param {number} bytes - The budget in bytes
+ * @returns {number} The MiB
+ */
+export const mapMeshBudgetToMiB = (bytes: number): number => Math.round((bytes / bytesPerMiB) * 100) / 100
+
+/**
+ * Converts a budget typed in MiB into the whole number of bytes it is stored as
+ * @param {number | string} mib - The budget in MiB, as typed
+ * @returns {number | string} The bytes, or why the value cannot be a budget
+ */
+export const mapMeshBudgetFromMiB = (mib: number | string): number | string => {
+  const value = typeof mib === 'string' && mib.trim() === '' ? NaN : Number(mib)
+  if (!Number.isFinite(value)) return 'Must be a number.'
+  const bytes = Math.round(value * bytesPerMiB)
+  if (bytes <= 0) return 'Must be more than zero.'
+  return Number.isSafeInteger(bytes) ? bytes : `Must be at most ${Math.floor(maxMapMeshBudgetMiB)} MiB.`
+}
+
+/**
+ * What applying a budget typed in MiB changes
+ */
+export interface MapMeshBudgetChange {
+  /**
+   * The budget, in bytes
+   */
+  bytes: number
+  /**
+   * What to store: null for the default, so the setting follows a later default
+   */
+  stored: string | null
+  /**
+   * How the budget compares to the one in force before
+   */
+  direction: 'raised' | 'lowered' | 'unchanged'
+}
+
+/**
+ * Decides what applying a budget typed in MiB changes. A value equal to the current or the default budget as the
+ * settings show it, rounded to 2 decimals, means that budget rather than a nearby one.
+ * @param {number | string} mib - The budget in MiB, as typed
+ * @param {string | null} stored - The stored budget, null when none is
+ * @returns {MapMeshBudgetChange | string} The change, or why the value cannot be a budget
+ */
+export const mapMeshBudgetChange = (mib: number | string, stored: string | null): MapMeshBudgetChange | string => {
+  const typed = mapMeshBudgetFromMiB(mib)
+  if (typeof typed === 'string') return typed
+  const current = mapMeshBudgetBytes(stored)
+  const shown = Number(mib)
+  const bytes =
+    shown === mapMeshBudgetToMiB(current)
+      ? current
+      : shown === mapMeshBudgetToMiB(defaultMapMeshBudgetBytes)
+      ? defaultMapMeshBudgetBytes
+      : typed
+  const direction = bytes > current ? 'raised' : bytes < current ? 'lowered' : 'unchanged'
+  return { bytes, stored: bytes === defaultMapMeshBudgetBytes ? null : String(bytes), direction }
+}
+
+/**
+ * Tells the operator what applying a budget did
+ * @param {MapMeshBudgetChange} change - The applied change
+ * @returns {string} The message
+ */
+export const mapMeshBudgetChangeMessage = ({ bytes, stored, direction }: MapMeshBudgetChange): string => {
+  const limit = `${mapMeshBudgetToMiB(bytes)} MiB${stored === null ? ' (the default)' : ''}`
+  if (direction === 'raised') return `Map mesh memory limit raised to ${limit}.`
+  if (direction === 'unchanged') return `Map mesh memory limit unchanged at ${limit}.`
+  return `Map mesh memory limit lowered to ${limit}. Existing meshes are kept, even if they now exceed it.`
+}
+
 /**
  * Error for a mesh definition that would push the total reserved by all meshes past the budget
  */
