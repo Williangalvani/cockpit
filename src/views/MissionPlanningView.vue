@@ -4989,6 +4989,8 @@ let detachTileFallbacks: (() => void)[] = []
 let stopTileFallbackWatcher: (() => void) | undefined
 let stopUnFollowOnUserDrag: (() => void) | undefined
 let fallbackLayers: L.TileLayer[] = []
+// The view can unmount during any await in onMounted; nothing may be set up after that.
+let unmounted = false
 
 onMounted(async () => {
   // Build the shared base maps, overlays and extra OSM overlay (tile-provider definitions live in useMapTileLayers)
@@ -5063,6 +5065,7 @@ onMounted(async () => {
   osmLayer = osm
 
   await nextTick()
+  if (unmounted) return
 
   planningMap.value.on('mousemove', handleMapMouseMoveNearMissionPath)
   window.addEventListener('keydown', onGlobalKeyDown)
@@ -5091,6 +5094,7 @@ onMounted(async () => {
 
   // Render any user-loaded GeoTIFF overlays and keep them in sync with the stored metadata
   await mapOverlays.initOverlays(planningMap.value, layerControl)
+  if (unmounted) return
   initExternalOverlayLayers(planningMap.value, layerControl)
 
   initHazardOverlay(planningMap.value, layerControl)
@@ -5147,6 +5151,7 @@ watch(followerTarget, (newTarget) => {
 })
 
 onUnmounted(() => {
+  unmounted = true
   // Debounced saves may still be pending; write the live view now so Flight Mode mounts with it.
   persistLiveMapView(missionStore.saveLastMapPosition, planningMap.value, zoom.value, mapCenter.value)
 
