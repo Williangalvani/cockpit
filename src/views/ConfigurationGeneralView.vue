@@ -449,14 +449,16 @@
                   For georeferenced imagery sent many times a second, create a mesh of textured quads on the map with
                   <span class="font-mono">cockpit:setMapMesh</span>: id, name, capacity (up to
                   {{ externalMapMeshLimits.maxCapacity }} slots) and the format (r8 or rgba8), width and height (up to
-                  {{ externalMapMeshLimits.maxTexelSide }}) of every quad's strip of texels, plus an optional filter,
-                  opacity and, for r8, a palette of 256 straight-alpha RGBA entries, where zero alpha lets what is
-                  underneath show through. Sent again with the same layout, it keeps its quads. Write quads into slots
-                  with <span class="font-mono">cockpit:setMapMeshQuads</span> at <span class="font-mono">first</span>,
-                  or after the previous write when omitted, wrapping around: per quad, 4 float64 longitude/latitude
-                  corners in ring order, 4 float32 uv in texels of its own strip (centres at +0.5), its strip row by row
-                  and an optional RGBA tint, each array the base64 of its little-endian bytes, at most
-                  {{ externalMapMeshLimits.maxQuadsPerMessage }} quads and
+                  {{ externalMapMeshLimits.maxTexelSide }}, and {{ externalMapMeshLimits.maxStripBytes }} bytes at most,
+                  so one untinted quad, corners and uv fit a message; 4 less with a tint) of every quad's strip of
+                  texels, plus an optional filter, opacity and, for r8, a palette of 256 straight-alpha RGBA entries,
+                  where zero alpha lets what is underneath show through. Sent again with the same layout, it keeps its
+                  quads; a changed capacity, format or strip size starts empty, and a refused one keeps the old quads.
+                  Write quads into slots with <span class="font-mono">cockpit:setMapMeshQuads</span> at
+                  <span class="font-mono">first</span>, or after the previous write when omitted, wrapping around: per
+                  quad, 4 float64 longitude/latitude corners in ring order, 4 float32 uv in texels of its own strip
+                  (centres at +0.5), its strip row by row and an optional RGBA tint, each array the base64 of its
+                  little-endian bytes, at most {{ externalMapMeshLimits.maxQuadsPerMessage }} quads and
                   {{ externalMapMeshLimits.maxMessageBytes / 1024 / 1024 }} MiB per message. Quads are split along their
                   corner 1 to 3 diagonal and drawn in slot order from the next slot to write: the first to cover a pixel
                   is drawn as it is and each later one mixes into it with 60% weight, transparent texels included, so
@@ -479,7 +481,9 @@
                   Cockpit has none, while after a dropped connection they stay as they were, without what was sent in
                   between, and no mesh is removed when a connection closes. So on every connection ask for the
                   capabilities and set the mesh, then either clear it, whatever your slot numbering, and replay the
-                  quads to show, oldest first, with explicit slots, or send every write and removal it missed.
+                  quads to show, oldest first, with explicit slots, or send every write and removal it missed. A mesh
+                  reserves its whole capacity when set, and one past the map meshes memory limit below is refused with
+                  <span class="font-mono">code: 'budget'</span>.
                 </li>
                 <li>
                   You can use data-lake variables to compose the URL, for example:
@@ -500,6 +504,59 @@
               @add="addGenericWebSocket"
               @remove="removeGenericWebSocket"
             />
+          </template>
+        </ExpansiblePanel>
+        <ExpansiblePanel :is-expanded="!interfaceStore.isOnPhoneScreen">
+          <template #title>Map meshes memory</template>
+          <template #info>
+            <p class="w-full">
+              The most memory the map meshes sent by external software can reserve together on this computer. A mesh
+              reserves its whole capacity when it is created, and one that would go past this limit is refused. Drawn
+              meshes take about as much again on the graphics card. Lowering the limit removes no mesh: it only refuses
+              new or larger ones. The default, {{ defaultMapMeshBudgetMiB }} MiB, holds 16 Ping360 sonar meshes of 225 s
+              of history each. This setting stays on this computer and is not synced with the vehicle.
+            </p>
+          </template>
+          <template #content>
+            <v-form
+              ref="mapMeshBudgetForm"
+              v-model="mapMeshBudgetFormValid"
+              class="w-full mt-2 pb-2"
+              @submit.prevent="setMapMeshBudget"
+            >
+              <div class="flex items-start gap-2">
+                <v-text-field
+                  v-model.number="newMapMeshBudgetMiB"
+                  variant="filled"
+                  type="number"
+                  density="compact"
+                  theme="dark"
+                  class="flex-1"
+                  suffix="MiB"
+                  :rules="[isValidMapMeshBudget]"
+                >
+                  <template #append-inner>
+                    <v-btn
+                      v-tooltip.bottom="'Reset to default'"
+                      icon="mdi-restore"
+                      variant="text"
+                      size="x-small"
+                      aria-label="Reset to default"
+                      @click="resetMapMeshBudget"
+                    />
+                  </template>
+                </v-text-field>
+                <v-btn
+                  :size="interfaceStore.isOnSmallScreen ? 'small' : 'default'"
+                  :disabled="!mapMeshBudgetFormValid"
+                  class="bg-transparent mt-1"
+                  variant="text"
+                  type="submit"
+                >
+                  Apply
+                </v-btn>
+              </div>
+            </v-form>
           </template>
         </ExpansiblePanel>
         <McpSettings />
@@ -610,7 +667,7 @@
 </template>
 
 <script setup lang="ts">
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useStorage } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { defaultGlobalAddress } from '@/assets/defaults'
@@ -620,6 +677,7 @@ import McpSettings from '@/components/configuration/McpSettings.vue'
 import ExpansiblePanel from '@/components/ExpansiblePanel.vue'
 import VehicleDiscoveryDialog from '@/components/VehicleDiscoveryDialog.vue'
 import { useInteractionDialog } from '@/composables/interactionDialog'
+import { mapMeshBudgetKey } from '@/composables/map/useExternalMapMeshes'
 import {
   addSecondaryVehicle,
   canPlaceSecondaryVehiclesOnMap,
@@ -641,6 +699,7 @@ import {
   removeGenericWebSocketConnection,
 } from '@/libs/generic-websocket'
 import { externalMapMeshLimits } from '@/libs/map/external-map-mesh-api'
+import { defaultMapMeshBudgetBytes, mapMeshBudgetBytes, mapMeshBudgetFromMiB } from '@/libs/map/external-map-meshes'
 import { isElectron, isValidNetworkAddress } from '@/libs/utils'
 import { replaceDataLakeInputsInString } from '@/libs/utils-data-lake'
 import { reloadCockpitAndWarnUser } from '@/libs/utils-vue'
@@ -967,6 +1026,44 @@ const resetWatchdogTimeout = (): void => {
   logUserAction('Reset reconnection watchdog timeout to default')
   newVehicleConnectionWatchdogTimeoutSeconds.value = defaultVehicleConnectionWatchdogTimeoutSeconds
   mainVehicleStore.vehicleConnectionWatchdogTimeoutMs = defaultVehicleConnectionWatchdogTimeoutSeconds * 1000
+}
+
+/** Map meshes memory */
+
+const bytesPerMiB = 1024 * 1024
+const defaultMapMeshBudgetMiB = defaultMapMeshBudgetBytes / bytesPerMiB
+const storedMapMeshBudget = useStorage<string | null>(mapMeshBudgetKey, null)
+const mapMeshBudgetMiB = computed(() => mapMeshBudgetBytes(storedMapMeshBudget.value) / bytesPerMiB)
+
+const mapMeshBudgetForm = ref()
+const mapMeshBudgetFormValid = ref(true)
+const newMapMeshBudgetMiB = ref<number>(mapMeshBudgetMiB.value)
+
+watch(mapMeshBudgetMiB, (value) => (newMapMeshBudgetMiB.value = value))
+
+const isValidMapMeshBudget = (value: number | string): boolean | string => {
+  const bytes = mapMeshBudgetFromMiB(value)
+  return typeof bytes === 'number' || bytes
+}
+
+const setMapMeshBudget = async (): Promise<void> => {
+  const validation = await mapMeshBudgetForm.value.validate()
+  const bytes = mapMeshBudgetFromMiB(newMapMeshBudgetMiB.value)
+  if (!validation.valid || typeof bytes !== 'number') return
+
+  logUserAction(`Set the map meshes memory limit to ${bytes} bytes`)
+  storedMapMeshBudget.value = String(bytes)
+  const limit = mapMeshBudgetMiB.value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+  openSnackbar({
+    message: `New reservation limit: ${limit} MiB. Meshes already reserving more are kept.`,
+    variant: 'success',
+  })
+}
+
+const resetMapMeshBudget = (): void => {
+  logUserAction('Reset the map meshes memory limit to default')
+  storedMapMeshBudget.value = null
+  newMapMeshBudgetMiB.value = defaultMapMeshBudgetMiB
 }
 
 const isValidHostAddress = (value: string): boolean | string => {

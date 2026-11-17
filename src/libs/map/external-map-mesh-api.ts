@@ -20,6 +20,9 @@ export const externalMapMeshApiVersion = 1
  */
 export const externalMapMeshTexelFormats = ['r8', 'rgba8'] as const
 
+// What a write carries for each quad besides its strip and its optional tint: 8 float64 corners and 8 float32 uv.
+const quadCornerAndUvBytes = 8 * 8 + 8 * 4
+
 /**
  * Limits on what a sender can ask of the map meshes
  */
@@ -42,6 +45,11 @@ export const externalMapMeshLimits = {
    * texture page on every device
    */
   maxTexelSide: 2048,
+  /**
+   * Most texel bytes a quad's strip can have, width x height x bytes per texel, so one untinted quad of it fits a
+   * message with its corners and uv. A tint takes 4 bytes more, and a batch of quads is held to `maxMessageBytes`.
+   */
+  maxStripBytes: 2 * 1024 * 1024 - quadCornerAndUvBytes,
 } as const
 
 const {
@@ -49,12 +57,14 @@ const {
   maxQuadsPerMessage: maxMeshWriteQuads,
   maxMessageBytes: maxMeshMessageBytes,
   maxTexelSide: maxStripSide,
+  maxStripBytes,
 } = externalMapMeshLimits
 // Guards the GPU: a million quads spanning the screen at high zoom would be a million full-screen fills.
 const maxQuadDiagonalMetres = 20_000
 const maxMeshLatitude = 85.05
 const paletteBytes = 256 * 4
 const metresPerDegree = (Math.PI / 180) * 6378137
+const texelBytes = { r8: 1, rgba8: 4 }
 
 type TypedArrayConstructor = Float64ArrayConstructor | Float32ArrayConstructor | Uint8ArrayConstructor
 
@@ -107,6 +117,10 @@ export const externalMapMeshSchema = z
   .refine((mesh) => mesh.palette === undefined || mesh.texels.format === 'r8', {
     message: 'Only r8 meshes have a palette.',
     path: ['palette'],
+  })
+  .refine(({ texels }) => texels.width * texels.height * texelBytes[texels.format] <= maxStripBytes, {
+    message: `A strip has to fit a message of ${maxMeshMessageBytes} bytes with its quad's corners and uv.`,
+    path: ['texels'],
   })
 
 const meshQuadsShape = {
@@ -248,6 +262,31 @@ export interface ExternalMapMeshResult {
    */
   error?: string
   /**
+   * Why the command was rejected, for software to act on: `budget` when a `cockpit:setMapMesh` would take what every
+   * mesh together reserves past `budgetBytes`
+   */
+  code?: 'budget'
+  /**
+   * Bytes every mesh reserves for its full capacity now, the refused one's current definition included, when refused
+   * on the budget: the same as the capabilities' `usedBytes`. The most the mesh can reserve is the larger of
+   * `previousBytes` and `budgetBytes - usedBytes + previousBytes`, which can be negative after the budget was lowered
+   * without preventing a definition reserving no more than `previousBytes`.
+   */
+  usedBytes?: number
+  /**
+   * Bytes the refused mesh's current definition reserves, 0 for a new id. It would reserve
+   * `usedBytes - previousBytes + requestedBytes` in all once replaced.
+   */
+  previousBytes?: number
+  /**
+   * Bytes the refused mesh would reserve for its full capacity, replacing `previousBytes`
+   */
+  requestedBytes?: number
+  /**
+   * Most bytes every mesh together can reserve, when refused on the budget
+   */
+  budgetBytes?: number
+  /**
    * First slot a `cockpit:setMapMeshQuads` wrote
    */
   first?: number
@@ -290,6 +329,15 @@ export interface ExternalMapCapabilities {
      */
     drawn: boolean
     /**
+     * Most bytes every mesh together can reserve for its full capacity, past which `cockpit:setMapMesh` is refused
+     */
+    budgetBytes: number
+    /**
+     * Bytes every mesh reserves for its full capacity now, however much of it is written. A snapshot: other senders
+     * can reserve more before your next `cockpit:setMapMesh`.
+     */
+    usedBytes: number
+    /**
      * Texel formats a mesh's strips can have
      */
     formats: (typeof externalMapMeshTexelFormats)[number][]
@@ -305,15 +353,22 @@ export type ExternalMapReply = (message: ExternalMapMeshResult | ExternalMapCapa
  * Answers a `cockpit:getMapCapabilities`
  * @param {string} queryId - The query's `requestId`
  * @param {boolean} drawn - Whether this computer draws meshes
+ * @param {Pick<ExternalMapCapabilities['meshes'], 'budgetBytes' | 'usedBytes'>} budget - What every mesh together
+ * can reserve, and reserves now
  * @returns {ExternalMapCapabilities} The answer
  */
-export const externalMapCapabilities = (queryId: string, drawn: boolean): ExternalMapCapabilities => ({
+export const externalMapCapabilities = (
+  queryId: string,
+  drawn: boolean,
+  budget: Pick<ExternalMapCapabilities['meshes'], 'budgetBytes' | 'usedBytes'>
+): ExternalMapCapabilities => ({
   type: 'cockpit:mapCapabilities',
   requestId: queryId,
   meshes: {
     version: externalMapMeshApiVersion,
     drawn,
     ...externalMapMeshLimits,
+    ...budget,
     formats: [...externalMapMeshTexelFormats],
   },
 })

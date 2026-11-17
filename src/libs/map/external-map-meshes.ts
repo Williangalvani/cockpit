@@ -280,8 +280,10 @@ export interface MapMeshDrawRange {
 
 const bytesPerTexel = { r8: 1, rgba8: 4 }
 
+const paletteBytes = 256 * 4
+
 const greyRamp = (): Uint8Array => {
-  const palette = new Uint8Array(256 * 4)
+  const palette = new Uint8Array(paletteBytes)
   for (let i = 0; i < 256; i++) palette.set([i, i, i, 255], i * 4)
   return palette
 }
@@ -399,9 +401,105 @@ const pageLayout = (mesh: MeshLayout, index: number): PageLayout => {
   return { index, firstSlot, slotCount, width, height }
 }
 
+const pageBytes = (mesh: MeshLayout, index: number): number => {
+  const { slotCount, width, height } = pageLayout(mesh, index)
+  return slotCount * meshInstanceBytes + width * height * mesh.bytesPerTexel
+}
+
+// What a mesh holds on the CPU once every page is written. Every page but the last is the same size as the first.
+const meshReservedBytes = (mesh: MeshLayout): number => {
+  const pages = Math.ceil(mesh.capacity / mesh.slotsPerPage)
+  return paletteBytes + (pages - 1) * pageBytes(mesh, 0) + pageBytes(mesh, pages - 1)
+}
+
+/**
+ * Bytes a mesh reserves against the budget when defined, for mesh commands version 1. A mesh is cut into pages of
+ * 2048x2048 texels holding floor(2048 / width) x floor(2048 / height) strips each; every page but the last is full,
+ * and the last only as wide and tall as its slots need. Each slot costs 68 bytes plus its strip, the palette
+ * 1024 bytes: 1024 + Σ per page (68 x slots + page width x page height x bytes per texel). This is buffer
+ * accounting, not physical memory: defining a mesh allocates its palette and an empty sparse page index, while page
+ * buffers are allocated only when the page is first written. The inputs must already be a valid mesh: a capacity,
+ * strip width and height, and format within the capabilities. This only estimates; it does not
+ * validate, and gives a meaningless figure rather than an error for anything else.
+ * @param {number} capacity - Slots of the mesh
+ * @param {ValidatedMapMesh['texels']} texels - Format, width and height of each slot's strip
+ * @returns {number} Bytes the mesh reserves
+ */
+export const mapMeshReservedBytes = (capacity: number, texels: ValidatedMapMesh['texels']): number =>
+  meshReservedBytes(meshLayout(capacity, texels))
+
+/**
+ * Bytes every mesh together reserves unless this computer is set otherwise: 16 production rolling-history Ping360
+ * meshes as ping-viewer maps them, r8 strips of its 1200 samples, 11264 slots each (225.28 s at its fastest 50 Hz,
+ * a 210 s target rounded up to a multiple of 1024 slots), 14,283,776 bytes each. 16 is policy, not a measured memory
+ * guarantee. Drawn meshes take about as much again on the GPU.
+ */
+export const defaultMapMeshBudgetBytes = 16 * mapMeshReservedBytes(11264, { format: 'r8', width: 1200, height: 1 })
+
+/**
+ * The budget a computer is set to, read as stored: only a positive whole number of bytes counts
+ * @param {string | null} stored - The stored budget, null when none is
+ * @returns {number} The bytes, or {@link defaultMapMeshBudgetBytes} for anything else
+ */
+export const mapMeshBudgetBytes = (stored: string | null): number => {
+  const bytes = stored !== null && /^[1-9]\d*$/.test(stored) ? Number(stored) : NaN
+  return Number.isSafeInteger(bytes) ? bytes : defaultMapMeshBudgetBytes
+}
+
+const bytesPerMiB = 1024 * 1024
+const maxMapMeshBudgetMiB = Number.MAX_SAFE_INTEGER / bytesPerMiB
+
+/**
+ * Reads a budget an operator typed in MiB as the whole bytes it is stored as
+ * @param {number | string} mib - The budget in MiB, as typed
+ * @returns {number | string} The bytes, or why the value cannot be a budget
+ */
+export const mapMeshBudgetFromMiB = (mib: number | string): number | string => {
+  const value = typeof mib === 'string' && mib.trim() === '' ? NaN : Number(mib)
+  if (!Number.isFinite(value)) return 'Must be a number.'
+  const bytes = Math.round(value * bytesPerMiB)
+  if (bytes <= 0) return 'Must be more than zero.'
+  return Number.isSafeInteger(bytes)
+    ? bytes
+    : `Must be at most ${Number.MAX_SAFE_INTEGER} bytes (${maxMapMeshBudgetMiB} MiB).`
+}
+
+/**
+ * Refusal of a mesh that would take what every mesh together reserves past the budget
+ */
+export class MapMeshBudgetError extends Error {
+  readonly code = 'budget' as const
+
+  /**
+   * @param {string} id - Id of the refused mesh
+   * @param {number} usedBytes - Bytes every mesh reserves now, the refused one's current definition included
+   * @param {number} previousBytes - Bytes the mesh's current definition reserves, 0 if it is new
+   * @param {number} requestedBytes - Bytes the mesh would reserve for its full capacity
+   * @param {number} budgetBytes - Most bytes every mesh together can reserve
+   */
+  constructor(
+    id: string,
+    readonly usedBytes: number,
+    readonly previousBytes: number,
+    readonly requestedBytes: number,
+    readonly budgetBytes: number
+  ) {
+    super(
+      `Mesh '${id}' needs ${requestedBytes} bytes for its full capacity, in place of the ${previousBytes} it ` +
+        `reserves, but the meshes already reserve ${usedBytes} of the ${budgetBytes} this computer allows them together.`
+    )
+    this.name = 'MapMeshBudgetError'
+  }
+}
+
 /**
  * The meshes external software sent, kept on the CPU as the source of truth every map draws from, and that the
  * GPU copy is rebuilt from when the WebGL context is lost. Not reactive: maps subscribe to its changes instead.
+ *
+ * A mesh reserves its full capacity when it is defined, and one that would take the reservations past the budget
+ * is refused, so writes are not rejected by the aggregate budget. Nothing is physically reserved, so allocating a
+ * page or its WebGL copy can still fail. A page is only allocated on its first write,
+ * and a renderer drawing it holds a copy of about the same size on the GPU.
  */
 export class MapMeshStore {
   readonly meshes = new Map<string, MapMesh>()
@@ -412,6 +510,13 @@ export class MapMeshStore {
   private readonly onGpu = new Set<string>()
   // Ids of the meshes whose settings or pages changed since the last flush, which every per-mesh draw calls.
   private readonly dirty = new Set<string>()
+  // Kept as meshes are set and removed rather than summed, so a sender defining many meshes costs O(1) for each.
+  private reserved = 0
+
+  /**
+   * @param {() => string | null} storedBudget - Reads the budget this computer is set to, in bytes, as stored
+   */
+  constructor(private readonly storedBudget: () => string | null = () => null) {}
 
   /**
    * Calls a listener on every change
@@ -434,7 +539,8 @@ export class MapMeshStore {
 
   /**
    * Creates or redefines a mesh. One with the same capacity and texel layout keeps its quads; a changed capacity,
-   * format or strip size starts empty.
+   * format or strip size starts empty. Throws a {@link MapMeshBudgetError}, changing nothing and so keeping the old
+   * quads, if its full capacity would take the reservations past the budget.
    * @param {ValidatedMapMesh} definition - The mesh as the sender defined it
    */
   set(definition: ValidatedMapMesh): void {
@@ -453,7 +559,17 @@ export class MapMeshStore {
       return
     }
     const layout = meshLayout(capacity, texels)
+    const requestedBytes = mapMeshReservedBytes(capacity, texels)
+    const previousBytes = previous ? meshReservedBytes(previous) : 0
+    const usedBytes = this.reservedBytes()
+    const resultingBytes = usedBytes - previousBytes + requestedBytes
+    const budgetBytes = this.budgetBytes()
+    // A lowered budget evicts nothing: only a definition reserving more than the one it replaces is held to it.
+    if (requestedBytes > previousBytes && resultingBytes > budgetBytes) {
+      throw new MapMeshBudgetError(id, usedBytes, previousBytes, requestedBytes, budgetBytes)
+    }
     if (previous) this.releaseGpuCopy(id)
+    this.reserved = resultingBytes
     this.meshes.set(id, {
       id,
       name,
@@ -548,7 +664,7 @@ export class MapMeshStore {
    * @param {string} id - Id of the mesh
    */
   remove(id: string): void {
-    this.existing(id)
+    this.reserved -= meshReservedBytes(this.existing(id))
     this.meshes.delete(id)
     // Retired here rather than on the next flush, which never comes once no mesh is left to draw.
     this.dirty.delete(id)
@@ -624,6 +740,23 @@ export class MapMeshStore {
       mesh.pages.forEach((page) => page && (bytes += page.instances.byteLength + page.texels.byteLength))
     }
     return bytes
+  }
+
+  /**
+   * Bytes every mesh reserves for its full capacity, which {@link set} keeps within the budget. A cleared mesh keeps
+   * its reservation, so its sender can write it full again.
+   * @returns {number} The bytes
+   */
+  reservedBytes(): number {
+    return this.reserved
+  }
+
+  /**
+   * Most bytes every mesh together can reserve, as {@link mapMeshBudgetBytes} reads the budget this computer is set to
+   * @returns {number} The bytes
+   */
+  budgetBytes(): number {
+    return mapMeshBudgetBytes(this.storedBudget())
   }
 
   /* eslint-disable jsdoc/require-jsdoc -- private helpers, commented where they need it. */

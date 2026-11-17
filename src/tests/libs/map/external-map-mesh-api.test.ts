@@ -58,6 +58,51 @@ describe('cockpit:setMapMesh', () => {
     const tooWide = { ...mesh, texels: { format: 'r8', width: 2049, height: 1 } }
     expect(externalMapMeshCommandSchema.safeParse({ type: 'cockpit:setMapMesh', mesh: tooWide }).success).toBe(false)
   })
+
+  // A write carries at least one quad: its strip plus 64 bytes of corners and 32 of uv, its tint being optional.
+  it('accepts a strip as long as one quad of it fits a message, in either format', () => {
+    const parse = (format: string, width: number, height: number): ReturnType<typeof parseQuads> =>
+      externalMapMeshCommandSchema.safeParse({
+        type: 'cockpit:setMapMesh',
+        mesh: { ...mesh, texels: { format, width, height } },
+      })
+    expect(externalMapMeshLimits.maxMessageBytes - 96).toBe(1846 * 1136)
+    expect(externalMapMeshLimits.maxStripBytes).toBe(1846 * 1136)
+    expect(parse('r8', 1846, 1136).success).toBe(true)
+    expect(parse('r8', 1200, 1).success).toBe(true)
+    expect(parse('rgba8', 923, 568).success).toBe(true)
+    expect(parse('rgba8', 724, 724).success).toBe(true)
+
+    // The smallest strips past that, 10 and 12 bytes over, and the ones the side limit alone used to let through.
+    for (const [format, width, height] of [
+      ['r8', 1086, 1931],
+      ['r8', 2048, 1024],
+      ['r8', 2048, 2048],
+      ['rgba8', 673, 779],
+      ['rgba8', 725, 725],
+      ['rgba8', 2048, 2048],
+    ] as const) {
+      const result = parse(format, width, height)
+      expect(result.success, `${format} ${width}x${height}`).toBe(false)
+      expect(result.error?.issues[0]?.path).toEqual(['mesh', 'texels'])
+    }
+  })
+
+  // Sensor data past the strip limits is tiled or split, and values that are not bytes are quantized through a palette.
+  it.each([
+    ['a 1080p camera frame', 'rgba8', 1920, 1080, false],
+    ['the same frame in quarters', 'rgba8', 960, 540, true],
+    ['a swath of 4096 soundings', 'r8', 4096, 1, false],
+    ['the same swath in halves', 'r8', 2048, 1, true],
+    ['float depths', 'r32f', 1024, 1, false],
+    ['16-bit samples', 'r16', 1024, 1, false],
+  ] as const)('takes %s as %s %ix%i: %s', (...useCase) => {
+    const [, format, width, height, accepted] = useCase
+    const definition = { ...mesh, texels: { format, width, height } }
+    expect(externalMapMeshCommandSchema.safeParse({ type: 'cockpit:setMapMesh', mesh: definition }).success).toBe(
+      accepted
+    )
+  })
 })
 
 describe('cockpit:setMapMeshQuads', () => {
@@ -175,6 +220,7 @@ describe('externalMapMeshLimits', () => {
       maxQuadsPerMessage: 4096,
       maxMessageBytes: 2 * 1024 * 1024,
       maxTexelSide: 2048,
+      maxStripBytes: 2 * 1024 * 1024 - 96,
     })
   })
 })

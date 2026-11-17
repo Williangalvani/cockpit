@@ -327,8 +327,9 @@ describe('MapMeshGlRenderer releasing meshes', () => {
       dirty: pending(store, 'dirty').size,
       released: pending(store, 'released').size,
       meshes: store.meshes.size,
+      reserved: store.reservedBytes(),
       gpuMeshes: gpuMeshes(renderer).size,
-    }).toEqual({ maxDirty: 0, dirty: 0, released: 0, meshes: 0, gpuMeshes: 0 })
+    }).toEqual({ maxDirty: 0, dirty: 0, released: 0, meshes: 0, reserved: 0, gpuMeshes: 0 })
   })
 
   const churn = (store: MapMeshStore): void => {
@@ -345,7 +346,8 @@ describe('MapMeshGlRenderer releasing meshes', () => {
       dirty: pending(store, 'dirty').size,
       released: pending(store, 'released').size,
       meshes: store.meshes.size,
-    }).toEqual({ dirty: 0, released: 0, meshes: 0 })
+      reserved: store.reservedBytes(),
+    }).toEqual({ dirty: 0, released: 0, meshes: 0, reserved: 0 })
   })
 
   test('starts a renderer created after that with nothing to free, drawing and freeing a mesh defined before it', () => {

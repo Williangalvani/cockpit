@@ -50,9 +50,36 @@ describe('cockpit:getMapCapabilities', () => {
         maxQuadsPerMessage: 4096,
         maxMessageBytes: 2 * 1024 * 1024,
         maxTexelSide: 2048,
+        maxStripBytes: 2 * 1024 * 1024 - 96,
+        budgetBytes: 16 * 14_283_776,
+        usedBytes: meshes.reservedBytes(),
         formats: ['r8', 'rgba8'],
       },
     })
+  })
+
+  test('tell what every mesh reserves for its full capacity, not the bytes written so far', () => {
+    const allocated = meshes.byteSize()
+    const sonar = { ...mesh('capabilities-used', 11264), texels: { format: 'r8', width: 1200, height: 1 } }
+    const [created, written, used] = send(
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: sonar },
+      {
+        type: 'cockpit:setMapMeshQuads',
+        requestId: 'write',
+        id: 'capabilities-used',
+        ...quads(1),
+        texels: new Uint8Array(1200),
+      },
+      { type: 'cockpit:getMapCapabilities', requestId: 'caps' }
+    ) as unknown as [ExternalMapMeshResult, ExternalMapMeshResult, ExternalMapCapabilities]
+    expect([created, written]).toMatchObject([{ ok: true }, { ok: true }])
+    // Only the first of its 6 pages is allocated: 2048 slots of 68 bytes and 1200 texels, plus the palette.
+    expect(meshes.byteSize() - allocated).toBe(1024 + 2048 * 1268)
+    const [, freed] = send(
+      { type: 'cockpit:removeMapMesh', requestId: 'remove', id: 'capabilities-used' },
+      { type: 'cockpit:getMapCapabilities', requestId: 'caps' }
+    ) as unknown as [ExternalMapMeshResult, ExternalMapCapabilities]
+    expect(used.meshes.usedBytes - freed.meshes.usedBytes).toBe(14_283_776)
   })
 
   test('says meshes are not drawn without WebGL2, while mesh commands are still applied', () => {
@@ -147,6 +174,177 @@ describe('mesh command answers', () => {
       error: "Mesh 'answers-missing' does not exist.",
     })
     expect(answers[1]).toEqual({ type: 'cockpit:mapMeshResult', requestId: 'removed', id: 'answers-removed', ok: true })
+  })
+})
+
+describe('strip sizes', () => {
+  // `count` quads as in `quads`, each with a strip of `stripBytes` texel bytes and, when asked, a tint.
+  const stripQuads = (count: number, stripBytes: number, tinted = false): Record<string, ArrayBufferView> => ({
+    ...quads(count),
+    texels: new Uint8Array(count * stripBytes),
+    ...(tinted ? { tint: new Uint8Array(count * 4).fill(255) } : {}),
+  })
+  const stripMesh = (id: string, format: string, width: number, height: number): Record<string, unknown> => ({
+    ...mesh(id, 2),
+    texels: { format, width, height },
+  })
+
+  test('accept the largest strips one quad of fits a message, and write them, with a tint only where it fits', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    for (const [format, width, height] of [
+      ['r8', 1846, 1136],
+      ['rgba8', 923, 568],
+    ] as const) {
+      const id = `strips-largest-${format}`
+      const stripBytes = width * height * (format === 'r8' ? 1 : 4)
+      const [created, written, tinted] = send(
+        { type: 'cockpit:setMapMesh', requestId: 'set', mesh: stripMesh(id, format, width, height) },
+        { type: 'cockpit:setMapMeshQuads', requestId: 'write', id, ...stripQuads(1, stripBytes) },
+        { type: 'cockpit:setMapMeshQuads', requestId: 'tinted', id, ...stripQuads(1, stripBytes, true) }
+      )
+      expect(created).toMatchObject({ ok: true, capacity: 2 })
+      expect(written).toMatchObject({ ok: true, first: 0, count: 1, head: 1 })
+      expect(tinted).toMatchObject({ ok: false })
+      expect(tinted.error).toContain('at most 2097152 bytes')
+    }
+
+    const tintable = 1846 * 1135
+    const [created, tinted] = send(
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: stripMesh('strips-tintable', 'r8', 1846, 1135) },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'tinted', id: 'strips-tintable', ...stripQuads(1, tintable, true) }
+    )
+    expect(created).toMatchObject({ ok: true })
+    expect(tinted).toMatchObject({ ok: true, count: 1 })
+  })
+
+  test('write as many 1200x1 strips as a message carries', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const sonar = { ...stripMesh('strips-sonar', 'r8', 1200, 1), capacity: 16384 }
+    const [created, written, tooMany] = send(
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: sonar },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'write', id: 'strips-sonar', ...stripQuads(1618, 1200) },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'more', id: 'strips-sonar', ...stripQuads(1619, 1200) }
+    )
+    expect(created).toMatchObject({ ok: true, capacity: 16384 })
+    expect(written).toMatchObject({ ok: true, first: 0, count: 1618, head: 1618 })
+    expect(tooMany).toMatchObject({ ok: false })
+  })
+
+  test('refuse a strip no message could carry, leaving the mesh already under that id as it was', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const [created, written, refused] = send(
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: mesh('strips-refused') },
+      { type: 'cockpit:setMapMeshQuads', requestId: 'write', id: 'strips-refused', ...quads(1) },
+      { type: 'cockpit:setMapMesh', requestId: 'huge', mesh: stripMesh('strips-refused', 'r8', 2048, 1024) }
+    )
+    expect(created).toMatchObject({ ok: true })
+    expect(written).toMatchObject({ ok: true, head: 1 })
+    expect(refused).toMatchObject({ ok: false, id: 'strips-refused' })
+    expect(refused.error).toContain('mesh.texels')
+    expect(meshes.meshes.get('strips-refused')).toMatchObject({ stripWidth: 1, stripHeight: 1, capacity: 4, head: 1 })
+  })
+})
+
+describe('memory budget', () => {
+  const budgetKey = 'cockpit-map-mesh-budget-bytes'
+  const ping360Bytes = 14_283_776
+  const sonarMesh = (id: string): Record<string, unknown> => ({
+    ...mesh(id, 11264),
+    texels: { format: 'r8', width: 1200, height: 1 },
+  })
+  const capabilities = (): ExternalMapCapabilities['meshes'] => {
+    const [answer] = send({ type: 'cockpit:getMapCapabilities', requestId: 'caps' }) as unknown[]
+    return (answer as ExternalMapCapabilities).meshes
+  }
+
+  afterEach(() => localStorage.removeItem(budgetKey))
+
+  test('refuses a definition past the budget, telling the sender why in numbers', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const usedBytes = meshes.reservedBytes()
+    const cpuBytes = meshes.byteSize()
+    localStorage.setItem(budgetKey, String(usedBytes + ping360Bytes - 1))
+    const [refused, written] = send(
+      { type: 'cockpit:setMapMesh', requestId: 'set', mesh: sonarMesh('budget-refused') },
+      {
+        type: 'cockpit:setMapMeshQuads',
+        requestId: 'write',
+        id: 'budget-refused',
+        ...quads(1),
+        texels: new Uint8Array(1200),
+      }
+    )
+    expect(refused).toEqual({
+      type: 'cockpit:mapMeshResult',
+      requestId: 'set',
+      id: 'budget-refused',
+      ok: false,
+      error: expect.stringContaining(`${ping360Bytes} bytes`),
+      code: 'budget',
+      usedBytes,
+      previousBytes: 0,
+      budgetBytes: usedBytes + ping360Bytes - 1,
+      requestedBytes: ping360Bytes,
+    })
+    expect(written).toMatchObject({ ok: false, error: "Mesh 'budget-refused' does not exist." })
+    expect(meshes.byteSize()).toBe(cpuBytes)
+
+    localStorage.setItem(budgetKey, String(usedBytes + ping360Bytes))
+    const [created] = send({ type: 'cockpit:setMapMesh', requestId: 'set', mesh: sonarMesh('budget-refused') })
+    expect(created).toMatchObject({ ok: true })
+    send({ type: 'cockpit:removeMapMesh', id: 'budget-refused' })
+  })
+
+  test('answers a refused redefinition with the total and the mesh own reservation, keeping the mesh as it was', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    send(
+      { type: 'cockpit:setMapMesh', mesh: mesh('budget-redefined') },
+      { type: 'cockpit:setMapMeshQuads', id: 'budget-redefined', ...quads(1) }
+    )
+    const usedBytes = meshes.reservedBytes()
+    localStorage.setItem(budgetKey, String(usedBytes))
+    const [refused] = send({ type: 'cockpit:setMapMesh', requestId: 'grow', mesh: sonarMesh('budget-redefined') })
+    expect(refused).toMatchObject({
+      ok: false,
+      code: 'budget',
+      usedBytes,
+      // 4 slots of 68 bytes and 1 texel, plus the palette.
+      previousBytes: 1024 + 4 * 69,
+      requestedBytes: ping360Bytes,
+    })
+    expect(capabilities().usedBytes).toBe(usedBytes)
+    expect(meshes.meshes.get('budget-redefined')).toMatchObject({ capacity: 4, stripWidth: 1, head: 1, highWater: 1 })
+    send({ type: 'cockpit:removeMapMesh', id: 'budget-redefined' })
+  })
+
+  test("is this computer's own setting, the default for a stored one that is not a positive whole number", () => {
+    expect(capabilities().budgetBytes).toBe(16 * ping360Bytes)
+    localStorage.setItem(budgetKey, '104857600')
+    expect(capabilities().budgetBytes).toBe(104_857_600)
+    for (const malformed of ['-1', '0', '1.5', 'Infinity', 'NaN', '"104857600"', '1e8', 'true']) {
+      localStorage.setItem(budgetKey, malformed)
+      expect(capabilities().budgetBytes, malformed).toBe(16 * ping360Bytes)
+    }
+  })
+
+  test('cannot be changed by a sender', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const budgetBytes = meshes.reservedBytes()
+    localStorage.setItem(budgetKey, String(budgetBytes))
+    const answers = send(
+      { type: 'cockpit:setMapMeshBudget', requestId: 'raise', budgetBytes: 1e12 },
+      {
+        type: 'cockpit:setMapMesh',
+        requestId: 'set',
+        budgetBytes: 1e12,
+        mesh: { ...mesh('budget-raise'), budgetBytes: 1e12 },
+      }
+    )
+    expect(answers).toEqual([expect.objectContaining({ requestId: 'set', ok: false, code: 'budget', budgetBytes })])
+    capabilities().budgetBytes = 1e12
+    expect(capabilities().budgetBytes).toBe(budgetBytes)
+    expect(localStorage.getItem(budgetKey)).toBe(String(budgetBytes))
+    expect(meshes.has('budget-raise')).toBe(false)
   })
 })
 
