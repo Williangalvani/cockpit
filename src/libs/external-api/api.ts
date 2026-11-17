@@ -4,6 +4,8 @@ import type { ExternalPoi, ExternalPoiUpdate } from '@/libs/poi/external-api'
 
 import { CallbackRateLimiter } from './callback-rate-limiter'
 
+export { mapMeshReservedBytes } from '@/libs/map/external-map-meshes'
+
 /**
  * Current version of the Cockpit Widget API
  */
@@ -156,10 +158,15 @@ export function removeMapOverlay(id: string): void {
  * your code targets; unknown fields may appear in either direction and are ignored), `drawn` (false without WebGL2:
  * meshes are still kept and their commands answered, but nothing is shown), the limits `maxCapacity`,
  * `maxQuadsPerMessage`, `maxMessageBytes`, `maxTexelSide` and `maxStripBytes` (the most texel bytes one untinted strip
- * can have; subtract 4 when sending a tint, and keep a batch within `maxMessageBytes`), and the texel `formats`. If
- * Cockpit never answers, it predates map meshes. Answers to this and to mesh commands arrive as `message` events on
- * this window, in the order their commands were sent. A `requestId` has 1 to 256 characters: a query or command with
- * any other is invalid, so it is neither applied nor answered.
+ * can have; subtract 4 when sending a tint, and keep a batch within `maxMessageBytes`), `budgetBytes` (the most all
+ * meshes together may reserve for their full capacity on this computer, past which `cockpit:setMapMesh` is answered
+ * with `code: 'budget'`, `usedBytes`, `previousBytes`, `requestedBytes` and `budgetBytes`) and `usedBytes` (what they
+ * reserve now, the same total a refusal reports), and the texel `formats`. Capabilities are a snapshot: another sender
+ * can reserve space before your next `setMapMesh`. Size a mesh with `mapMeshReservedBytes`, the formula of version 1.
+ * To negotiate a smaller capacity, start from a refusal's `requestedBytes` and `previousBytes` rather than dividing
+ * bytes by bytes per strip. If Cockpit never answers, it predates map meshes. Answers to this and to mesh commands
+ * arrive as `message` events on this window, in the order their commands were sent. A `requestId` has 1 to 256
+ * characters: a query or command with any other is invalid, so it is neither applied nor answered.
  *
  * The mesh helpers work only from the page an IFrame widget loads: Cockpit applies and answers a mesh command only
  * when its `event.source` is that widget's own iframe. A DIY widget runs in Cockpit's own window, so what it posts is
@@ -175,7 +182,12 @@ export function getMapCapabilities(requestId: string): void {
  * Creates a mesh of textured quads on Cockpit's maps, for georeferenced imagery sent many times a second. Sending it
  * again with the same capacity and texels keeps its quads and its head, changing only its name, filter, palette and
  * opacity; the optional ones you omit return to their defaults (`'nearest'` filter, gray ramp palette, opacity 1).
- * Any other layout empties it. Meshes are drawn only where WebGL2 is available.
+ * Any other layout empties it, while a refused one keeps its quads. To grow a mesh, keep your source data, wait for
+ * the set to succeed, then replay oldest first. Meshes are drawn only where WebGL2 is available. A mesh reserves its
+ * whole capacity when set, whatever is later written, so ask for no more slots than you will show: 1024 bytes for its
+ * palette plus, per page, 68 bytes per slot and the page's texels, as `mapMeshReservedBytes` computes. All meshes
+ * together may reserve 218 MiB unless this computer sets another limit (`budgetBytes`), and a set past it is answered
+ * with `code: 'budget'`.
  *
  * Meshes are kept in memory only, so a Cockpit that reloads starts without them, while one whose connection to you
  * dropped keeps them as they were, without what you sent in between. Every sender shares them, so none is removed when
