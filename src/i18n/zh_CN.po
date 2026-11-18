@@ -2466,8 +2466,9 @@ msgstr "将 Cockpit 连接到您的 BlueOS Cloud 账户，即可直接在此应�
 #: src/components/Tutorial.vue
 msgid ""
 "Connect a controller and move a joystick or press a button to see the "
-"current function mapping."
-msgstr "连接控制器并移动摇杆或按下按钮以查看当前的功能映射。"
+"current function mapping. Keyboard keys can also be mapped, on the Keyboard "
+"tab."
+msgstr ""
 
 #: src/views/ConfigurationJoystickView.vue
 msgid "Connect a joystick to see its visual layout and live input."
@@ -2569,6 +2570,18 @@ msgstr "是否继续？"
 #: src/components/map/CustomTileProvidersManager.vue
 msgid "Contrast"
 msgstr "对比度"
+
+#: src/libs/menu-pages.ts
+msgid "Controllers"
+msgstr ""
+
+#: src/components/Tutorial.vue
+msgid "Controllers Configuration"
+msgstr ""
+
+#: src/views/ConfigurationJoystickView.vue
+msgid "Controllers configuration"
+msgstr ""
 
 #: src/components/widgets/URLVideoPlayer.vue
 msgid "Controls"
@@ -5747,7 +5760,6 @@ msgid ""
 "custom code."
 msgstr "JavaScript 操作通过允许您编写自定义代码，为您提供完全的灵活性。"
 
-#: src/libs/menu-pages.ts
 #: src/views/ToolsDataLakeView.vue
 msgid "Joystick"
 msgstr "摇杆"
@@ -5755,10 +5767,6 @@ msgstr "摇杆"
 #: src/components/joysticks/JoystickCalibration.vue
 msgid "Joystick Calibration"
 msgstr "摇杆校准"
-
-#: src/components/Tutorial.vue
-msgid "Joystick Configuration"
-msgstr "摇杆配置"
 
 #: src/components/ExternalFeaturesDiscoveryModal.vue
 msgid "Joystick Mappings"
@@ -5774,7 +5782,6 @@ msgstr "摇杆命令已暂停"
 
 #: src/components/vehicle-defaults/VehicleDefaultsAutoImportModal.vue
 #: src/components/vehicle-defaults/VehicleDefaultsAutoWizardDonePanel.vue
-#: src/views/ConfigurationJoystickView.vue
 msgid "Joystick configuration"
 msgstr "摇杆配置"
 
@@ -12509,3 +12516,11 @@ msgstr "——以按该单位制读取，而不是设备发送的原始值。较
 
 #~ msgid "URI of a Mavlink2Rest, or sitl://ardusub for the simulator"
 #~ msgstr "Mavlink2Rest 的 URI，或模拟器使用的 sitl://ardusub"
+
+#~ msgid ""
+#~ "Connect a controller and move a joystick or press a button to see the "
+#~ "current function mapping."
+#~ msgstr "连接控制器并移动摇杆或按下按钮以查看当前的功能映射。"
+
+#~ msgid "Joystick Configuration"
+#~ msgstr "摇杆配置"

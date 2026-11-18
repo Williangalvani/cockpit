@@ -2656,10 +2656,9 @@ msgstr ""
 #: src/components/Tutorial.vue
 msgid ""
 "Connect a controller and move a joystick or press a button to see the "
-"current function mapping."
+"current function mapping. Keyboard keys can also be mapped, on the Keyboard "
+"tab."
 msgstr ""
-"Conecte um controle e mova um joystick ou pressione um botão para ver o "
-"mapeamento de funções atual."
 
 #: src/views/ConfigurationJoystickView.vue
 msgid "Connect a joystick to see its visual layout and live input."
@@ -2769,6 +2768,18 @@ msgstr "Continuar?"
 #: src/components/map/CustomTileProvidersManager.vue
 msgid "Contrast"
 msgstr "Contraste"
+
+#: src/libs/menu-pages.ts
+msgid "Controllers"
+msgstr ""
+
+#: src/components/Tutorial.vue
+msgid "Controllers Configuration"
+msgstr ""
+
+#: src/views/ConfigurationJoystickView.vue
+msgid "Controllers configuration"
+msgstr ""
 
 #: src/components/widgets/URLVideoPlayer.vue
 msgid "Controls"
@@ -6158,7 +6169,6 @@ msgstr ""
 "As ações JavaScript oferecem total flexibilidade, permitindo que você "
 "escreva código personalizado."
 
-#: src/libs/menu-pages.ts
 #: src/views/ToolsDataLakeView.vue
 msgid "Joystick"
 msgstr "Joystick"
@@ -6166,10 +6176,6 @@ msgstr "Joystick"
 #: src/components/joysticks/JoystickCalibration.vue
 msgid "Joystick Calibration"
 msgstr "Calibração do joystick"
-
-#: src/components/Tutorial.vue
-msgid "Joystick Configuration"
-msgstr "Configuração do joystick"
 
 #: src/components/ExternalFeaturesDiscoveryModal.vue
 msgid "Joystick Mappings"
@@ -6185,7 +6191,6 @@ msgstr "Comandos do joystick pausados"
 
 #: src/components/vehicle-defaults/VehicleDefaultsAutoImportModal.vue
 #: src/components/vehicle-defaults/VehicleDefaultsAutoWizardDonePanel.vue
-#: src/views/ConfigurationJoystickView.vue
 msgid "Joystick configuration"
 msgstr "Configuração do joystick"
 
@@ -13481,3 +13486,13 @@ msgstr ""
 
 #~ msgid "URI of a Mavlink2Rest, or sitl://ardusub for the simulator"
 #~ msgstr "URI de um MAVLink2REST, ou sitl://ardusub para o simulador"
+
+#~ msgid ""
+#~ "Connect a controller and move a joystick or press a button to see the "
+#~ "current function mapping."
+#~ msgstr ""
+#~ "Conecte um controle e mova um joystick ou pressione um botão para ver o "
+#~ "mapeamento de funções atual."
+
+#~ msgid "Joystick Configuration"
+#~ msgstr "Configuração do joystick"
